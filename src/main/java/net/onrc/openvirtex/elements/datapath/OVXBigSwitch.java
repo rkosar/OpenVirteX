@@ -19,12 +19,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import net.onrc.openvirtex.api.service.handlers.TenantHandler;
-
 import net.onrc.openvirtex.elements.link.PhysicalLink;
 import net.onrc.openvirtex.elements.port.OVXPort;
 import net.onrc.openvirtex.exceptions.IndexOutOfBoundException;
 import net.onrc.openvirtex.exceptions.RoutingAlgorithmException;
-
 import net.onrc.openvirtex.routing.RoutingAlgorithms;
 import net.onrc.openvirtex.routing.RoutingAlgorithms.RoutingType;
 import net.onrc.openvirtex.routing.SwitchRoute;
@@ -33,8 +31,12 @@ import net.onrc.openvirtex.util.BitSetIndex.IndexType;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.OFMessage;
-import org.openflow.util.U8;
+import org.jboss.netty.channel.Channel;
+import org.projectfloodlight.openflow.protocol.OFExperimenter;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFVersion;
+import org.projectfloodlight.openflow.types.OFPort;
+import org.projectfloodlight.openflow.types.U8;
 
 /**
  * The Class OVXBigSwitch.
@@ -43,9 +45,7 @@ import org.openflow.util.U8;
 
 public class OVXBigSwitch extends OVXSwitch {
 
-	private static Logger                                         log = LogManager
-			.getLogger(OVXBigSwitch.class
-					.getName());
+	private static Logger                                         log = LogManager.getLogger(OVXBigSwitch.class.getName());
 
 	private RoutingAlgorithms                                     alg;
 
@@ -56,8 +56,8 @@ public class OVXBigSwitch extends OVXSwitch {
 	private final ConcurrentHashMap<OVXPort, ConcurrentHashMap<OVXPort, SwitchRoute>> routeMap;
 
 
-	public OVXBigSwitch(final long switchId, final int tenantId) {
-		super(switchId, tenantId);
+	public OVXBigSwitch(final long switchId, final int tenantId, final OFVersion ofversion) {
+		super(switchId, tenantId, ofversion);
 		try {
 			this.alg = new RoutingAlgorithms("spf", (byte)1);
 		} catch (RoutingAlgorithmException e) {
@@ -144,7 +144,7 @@ public class OVXBigSwitch extends OVXSwitch {
 	 * @see net.onrc.openvirtex.elements.datapath.Switch#removePort(short)
 	 */
 	@Override
-	public boolean removePort(final Short portNumber) {
+	public boolean removePort(final Integer portNumber) {
 		if (!this.portMap.containsKey(portNumber)) {
 			return false;
 		} else {
@@ -180,6 +180,7 @@ public class OVXBigSwitch extends OVXSwitch {
 					if (srcPort.getPortNumber() != dstPort.getPortNumber()
 							&& srcPort.getPhysicalPort().getParentSwitch() != dstPort
 							.getPhysicalPort().getParentSwitch()) {
+						log.warn(" from {} to {}", srcPort.getPortNumber(), dstPort.getPortNumber());
 						this.getRoute(srcPort, dstPort).register();
 					}
 				}
@@ -254,22 +255,24 @@ public class OVXBigSwitch extends OVXSwitch {
 	 *            the port number
 	 * @return the port instance
 	 */
-	@Override
-	public OVXPort getPort(final Short portNumber) {
+	
+	public OVXPort getPort(final OFPort portNumber) {
 		return this.portMap.get(portNumber);
 	};
 
 	@Override
 	public String toString() {
-		return "SWITCH:\n- switchId: " + this.switchId + "\n- switchName: "
-				+ this.switchName + "\n- isConnected: " + this.isConnected
-				+ "\n- tenantId: " + this.tenantId + "\n- missSendLenght: "
-				+ this.missSendLen + "\n- isActive: " + this.isActive
-				+ "\n- capabilities: "
-				+ this.capabilities.getOVXSwitchCapabilities();
+		return "SWITCH:\n- switchId: " + this.switchId 
+					+ "\n- switchName: " + this.switchName 
+					+ "\n- isConnected: " + this.isConnected
+					+ "\n- tenantId: " + this.tenantId 
+					+ "\n- missSendLength: " + this.missSendLen 
+					+ "\n- isActive: " + this.isActive
+					+ "\n- capabilities: " + this.capabilities.getOVXSwitchCapabilities()
+					+ "\n;";
 	}
 
-	@Override
+
 	public void sendSouth(final OFMessage msg, final OVXPort inPort) {
 		if (inPort == null) {
 			/* TODO for some OFTypes, we can recover an inport. */
@@ -340,8 +343,7 @@ public class OVXBigSwitch extends OVXSwitch {
 				log.debug("Add backup route for big-switch {} between ports ({},{}) with priority: {} and path: {}",
 						this.switchName, egress.getPortNumber(),
 						ingress.getPortNumber(), U8.f(priority), revpath.toString());
-			}
-			else {		
+			} else {		
 				rtEntry.replacePrimaryRoute(priority, path);
 				revRtEntry.replacePrimaryRoute(priority, revpath);
 				log.debug("Replace primary route for big-switch {} between ports ({},{}) with priority: {} and path: {}",
@@ -354,7 +356,6 @@ public class OVXBigSwitch extends OVXSwitch {
 		}
 		return rtEntry;
 	}
-
 
 	public SwitchRoute createRoute(final OVXPort ingress, final OVXPort egress,
 			final List<PhysicalLink> path, final List<PhysicalLink> revpath, byte priority)
@@ -374,9 +375,8 @@ public class OVXBigSwitch extends OVXSwitch {
 		}
 		rtmap.put(out, entry);
 	}
-
-	@Override
-	public int translate(final OFMessage ofm, final OVXPort inPort) {
+	
+	public long translate(final OFMessage ofm, final OVXPort inPort) {
 		if (inPort == null) {
 			// don't know the PhysicalSwitch, for now return original XID.
 			return ofm.getXid();
@@ -398,7 +398,7 @@ public class OVXBigSwitch extends OVXSwitch {
 						links.addAll(getRouteMap().get(p1).get(p2).getLinks());
 						links.addAll(getRouteMap().get(p2).get(p1).getLinks());
 					} catch (NullPointerException npe) {
-						log.debug("No route defined on switch {} in virtual network {} between ports {} and {}", 
+						log.warn("No route defined on switch {} in virtual network {} between ports {} and {}", 
 								this.getSwitchName(), this.getTenantId(), p1.getPortNumber(), p2.getPortNumber());
 						continue;
 					}
@@ -420,5 +420,10 @@ public class OVXBigSwitch extends OVXSwitch {
 		dbObject.put(TenantHandler.BACKUPS, this.alg.getBackups());
 		
 		return dbObject;
+	}
+
+	@Override
+	public void handleRoleIO(OFExperimenter msg, Channel channel) {
+		
 	}
 }

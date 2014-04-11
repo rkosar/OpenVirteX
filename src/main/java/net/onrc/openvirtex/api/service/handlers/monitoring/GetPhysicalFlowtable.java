@@ -59,9 +59,7 @@ public class GetPhysicalFlowtable extends ApiHandler<Map<String, Object>> {
 							+ ": Unable to fetch virtual topology : "
 							+ e.getMessage()), 0);
 		}
-		
 		return this.resp;
-
 	}
 
 	@Override
@@ -72,14 +70,15 @@ public class GetPhysicalFlowtable extends ApiHandler<Map<String, Object>> {
 	private List<Map<String, Object>> flowModsToMap(LinkedList<OVXFlowStatisticsReply> flows) {
 		final List<Map<String, Object>> res = new LinkedList<Map<String, Object>>();
 		for (OVXFlowStatisticsReply frep : flows) {
-			OVXFlowMod fm = new OVXFlowMod();
-			fm.setActions(frep.getActions());
-			fm.setMatch(frep.getMatch());
+			OVXFlowMod fm = new OVXFlowMod(frep.getVersion());
+			fm.setActions(frep.getActions())
+			  .setMatch(frep.getMatch());
+			
 			res.add(fm.toMap());
 		}
 		return res;
 	}
-	
+
 	private LinkedList<OVXFlowStatisticsReply> aggregateFlowsBySwitch(long dpid, Mappable map) {
 		LinkedList<OVXFlowStatisticsReply> flows = new LinkedList<OVXFlowStatisticsReply>();
 		final PhysicalSwitch sw = PhysicalNetwork.getInstance().getSwitch(dpid);
@@ -89,5 +88,4 @@ public class GetPhysicalFlowtable extends ApiHandler<Map<String, Object>> {
 		}
 		return flows;
 	}
-
 }

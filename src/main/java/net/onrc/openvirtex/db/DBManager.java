@@ -198,7 +198,7 @@ public class DBManager {
 			DBCollection collection = this.collections.get(obj.getDBName());
 			collection.update(query, update, true, false);
 		} catch (Exception e) {
-			log.error("Failed to update database: {}", e.getMessage());
+			//log.error("Failed to update database: {}", e.getMessage());
 		} finally {
 			System.setErr(ps);
 		}
@@ -341,9 +341,9 @@ public class DBManager {
 			for (Map<String, Object> hop: path) {
 				// Fetch link
 				Long srcDpid = (Long) hop.get(TenantHandler.SRC_DPID);
-				Short srcPort = ((Integer) hop.get(TenantHandler.SRC_PORT)).shortValue();
+				Integer srcPort = (Integer) hop.get(TenantHandler.SRC_PORT);
 				Long dstDpid = (Long) hop.get(TenantHandler.DST_DPID);
-				Short dstPort = ((Integer) hop.get(TenantHandler.DST_PORT)).shortValue();
+				Integer dstPort = (Integer) hop.get(TenantHandler.DST_PORT);
 				DPIDandPortPair dpp = new DPIDandPortPair(new DPIDandPort(srcDpid, srcPort),
 						new DPIDandPort(dstDpid, dstPort));
 				// Register link in current manager
@@ -382,7 +382,7 @@ public class DBManager {
 		for (Map<String, Object> port: ports) {
 			// Read dpid and port number
 			Long dpid = (Long) port.get(TenantHandler.DPID);
-			Short portNumber = ((Integer) port.get(TenantHandler.PORT)).shortValue();
+			Integer portNumber = (Integer) port.get(TenantHandler.PORT);
 			DPIDandPort p = new DPIDandPort(dpid, portNumber);
 			// Register port in current manager
 			mngr.registerPort(p);
@@ -407,9 +407,9 @@ public class DBManager {
 			List<Map<String, Object>> path = (List<Map<String, Object>>) route.get(TenantHandler.PATH);
 			for (Map<String, Object> hop: path) {
 				Long srcDpid = (Long) hop.get(TenantHandler.SRC_DPID);
-				Short srcPort = ((Integer) hop.get(TenantHandler.SRC_PORT)).shortValue();
+				Integer srcPort = (Integer) hop.get(TenantHandler.SRC_PORT);
 				Long dstDpid = (Long) hop.get(TenantHandler.DST_DPID);
-				Short dstPort = ((Integer) hop.get(TenantHandler.DST_PORT)).shortValue();
+				Integer dstPort = (Integer) hop.get(TenantHandler.DST_PORT);
 				DPIDandPortPair dpp = new DPIDandPortPair(new DPIDandPort(srcDpid, srcPort),
 						new DPIDandPort(dstDpid, dstPort));
 				// Register links in the appropriate manager

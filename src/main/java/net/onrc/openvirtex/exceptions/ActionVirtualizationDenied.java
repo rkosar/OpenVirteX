@@ -7,7 +7,7 @@
  ******************************************************************************/
 package net.onrc.openvirtex.exceptions;
 
-import org.openflow.protocol.OFError.OFBadActionCode;
+import org.projectfloodlight.openflow.protocol.OFBadActionCode;
 
 public class ActionVirtualizationDenied extends Exception {
 

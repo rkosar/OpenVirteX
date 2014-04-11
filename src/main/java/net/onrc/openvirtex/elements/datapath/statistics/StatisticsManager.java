@@ -1,6 +1,5 @@
 package net.onrc.openvirtex.elements.datapath.statistics;
 
-
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
@@ -18,15 +17,13 @@ import org.apache.logging.log4j.Logger;
 import org.jboss.netty.util.HashedWheelTimer;
 import org.jboss.netty.util.Timeout;
 import org.jboss.netty.util.TimerTask;
-import org.openflow.protocol.OFMessage;
-import org.openflow.protocol.OFPort;
-import org.openflow.protocol.Wildcards;
-import org.openflow.protocol.statistics.OFStatisticsType;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFStatsType;
+import org.projectfloodlight.openflow.protocol.OFVersion;
+import org.projectfloodlight.openflow.types.OFPort;
 
 public class StatisticsManager implements TimerTask, OVXSendMsg {
 
-	
-	
 	private HashedWheelTimer timer = null;
 	private PhysicalSwitch sw;
 	
@@ -49,7 +46,7 @@ public class StatisticsManager implements TimerTask, OVXSendMsg {
 	public void run(Timeout timeout) throws Exception {
 		log.debug("Collecting stats for {}", this.sw.getSwitchName());
 		sendPortStatistics();
-		sendFlowStatistics(0, (short) 0);
+		sendFlowStatistics(0, 0);
 		
 		if (!this.stopTimer) {
 			log.debug("Scheduling stats collection in {} seconds for {}", 
@@ -58,35 +55,39 @@ public class StatisticsManager implements TimerTask, OVXSendMsg {
 		}
 	}
 
-	private void sendFlowStatistics(int tid, short port) {
-		OVXStatisticsRequest req = new OVXStatisticsRequest();
+	private void sendFlowStatistics(int tid, int port) {
+		OFVersion ofversion = this.sw.getFeaturesReply().getVersion();
+		OVXStatisticsRequest req = new OVXStatisticsRequest(OFStatsType.FLOW, ofversion);
 		// TODO: stuff like below should be wrapped into an XIDUtil class
 		int xid = (tid << 16) | port; 
 		req.setXid(xid);
-		req.setStatisticType(OFStatisticsType.FLOW);
-		OVXFlowStatisticsRequest freq = new OVXFlowStatisticsRequest();
+		
+		OVXFlowStatisticsRequest freq = new OVXFlowStatisticsRequest(ofversion);
 		OVXMatch match = new OVXMatch();
-		match.setWildcards(Wildcards.FULL);
-		freq.setMatch(match);
-		freq.setOutPort(OFPort.OFPP_NONE.getValue());
-		freq.setTableId((byte)0xFF);
-		req.setStatistics(Collections.singletonList(freq));
-		req.setLengthU(req.getLengthU() + freq.getLength());
-		sendMsg(req,this);
-	}
+		//match.setWildcards(OFFlowWildcards.ALL);
+		
+		freq.setMatch(match)
+			.setOutPort(OFPort.ANY.getShortPortNumber())
+			.setTableId((short)0x00FF);
+			//.setTableId((byte)0xFF);
 
+		req.setStatistics(Collections.singletonList(freq));
+		//req.setLengthU(req.getLengthU() + freq.getLength());
+		sendMsg(req.getStats(), this);
+	}
+ 
 	private void sendPortStatistics() {
-		OVXStatisticsRequest req = new OVXStatisticsRequest();
-		req.setStatisticType(OFStatisticsType.PORT);
-		OVXPortStatisticsRequest preq = new OVXPortStatisticsRequest();
-		preq.setPortNumber(OFPort.OFPP_NONE.getValue());
+		OFVersion ofversion = this.sw.getFeaturesReply().getVersion();
+		OVXStatisticsRequest req = new OVXStatisticsRequest(OFStatsType.PORT, ofversion); 
+		OVXPortStatisticsRequest preq = new OVXPortStatisticsRequest(ofversion);
+		
+		preq.setPortNumber(OFPort.ANY.getShortPortNumber());
 		req.setStatistics(Collections.singletonList(preq));
-		req.setLengthU(req.getLengthU() + preq.getLength());
-		sendMsg(req, this);
+		//req.setLengthU(req.getLengthU() + preq.getLength());
+		sendMsg(req.getStats(), this);
 	}
 	
-	public void start() {
-		
+	public void start() {	
 		/*
 		 * Initially start polling quickly.
 		 * Then drop down to configured value
@@ -110,9 +111,7 @@ public class StatisticsManager implements TimerTask, OVXSendMsg {
 		return "Statistics Manager (" + sw.getName() + ")";
 	}
 
-	public void cleanUpTenant(Integer tenantId, short port) {
+	public void cleanUpTenant(Integer tenantId, Integer port) {
 		sendFlowStatistics(tenantId, port);
 	}
-
-
 }

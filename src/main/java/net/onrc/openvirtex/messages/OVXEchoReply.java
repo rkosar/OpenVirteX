@@ -12,11 +12,14 @@ package net.onrc.openvirtex.messages;
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 import net.onrc.openvirtex.elements.datapath.PhysicalSwitch;
 
-import org.openflow.protocol.OFEchoReply;
+import org.projectfloodlight.openflow.protocol.OFMessage;
 
-public class OVXEchoReply extends OFEchoReply implements Virtualizable,
-		Devirtualizable {
+public class OVXEchoReply implements Virtualizable,	Devirtualizable {
 
+	
+	public OVXEchoReply(OFMessage m)
+	{
+	}
 	@Override
 	public void virtualize(final PhysicalSwitch sw) {
 		// TODO: Log error, we should never receive this message here
@@ -30,5 +33,4 @@ public class OVXEchoReply extends OFEchoReply implements Virtualizable,
 		return;
 
 	}
-
 }

@@ -11,21 +11,24 @@ package net.onrc.openvirtex.messages.actions;
 
 import java.util.List;
 
+import org.projectfloodlight.openflow.protocol.action.OFAction;
+import org.projectfloodlight.openflow.protocol.action.OFActionSetTpSrc;
+
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 import net.onrc.openvirtex.exceptions.ActionVirtualizationDenied;
 import net.onrc.openvirtex.protocol.OVXMatch;
 
-import org.openflow.protocol.action.OFAction;
-import org.openflow.protocol.action.OFActionTransportLayerSource;
+public class OVXActionTransportLayerSource implements VirtualizableAction {
+	OFActionSetTpSrc asts;
 
-public class OVXActionTransportLayerSource extends OFActionTransportLayerSource
-		implements VirtualizableAction {
-
+	public OVXActionTransportLayerSource(OFAction action) {
+		this.asts = (OFActionSetTpSrc) action;
+	}
+	
 	@Override
 	public void virtualize(final OVXSwitch sw,
 			final List<OFAction> approvedActions, final OVXMatch match)
 			throws ActionVirtualizationDenied {
-		approvedActions.add(this);
+		approvedActions.add(this.asts);
 	}
-
 }

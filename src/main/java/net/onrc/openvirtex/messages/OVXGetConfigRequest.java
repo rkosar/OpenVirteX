@@ -9,22 +9,41 @@
 
 package net.onrc.openvirtex.messages;
 
+import java.util.Set;
+import java.util.TreeSet;
+
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 
-import org.openflow.protocol.OFGetConfigRequest;
+import org.projectfloodlight.openflow.protocol.OFConfigFlags;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFGetConfigReply;
+import org.projectfloodlight.openflow.protocol.OFGetConfigRequest;
+import org.projectfloodlight.openflow.protocol.OFMessage;
 
-public class OVXGetConfigRequest extends OFGetConfigRequest implements
-		Devirtualizable {
-
+public class OVXGetConfigRequest implements Devirtualizable {
+	private OFGetConfigRequest gcr;
+	
+	public OVXGetConfigRequest(OFMessage m) {
+		this.gcr = (OFGetConfigRequest) m;
+	}
+	
 	@Override
 	public void devirtualize(final OVXSwitch sw) {
-		final OVXGetConfigReply reply = new OVXGetConfigReply();
-		reply.setMissSendLength(sw.getMissSendLen());
+		//final OVXGetConfigReply reply = new OVXGetConfigReply(sw.getVersion());
+		
+		//reply.setMissSendLen(sw.getMissSendLen());
+		//reply.setXid(this.gcr.getXid());
 
-		reply.setXid(this.getXid());
-
-		sw.sendMsg(reply, sw);
-
+		Set<OFConfigFlags> flags = new TreeSet<OFConfigFlags>();
+		flags.add(OFConfigFlags.FRAG_NORMAL);
+		OFGetConfigReply rb = OFFactories.getFactory(sw.getVersion())
+				.buildGetConfigReply()
+				.setMissSendLen(sw.getMissSendLen())
+				.setFlags(flags)
+				.setXid(this.gcr.getXid())
+				.build();
+		
+		sw.sendMsg(rb, sw);
+		//sw.sendMsg(reply.getConfigReply(), sw);
 	}
-
 }

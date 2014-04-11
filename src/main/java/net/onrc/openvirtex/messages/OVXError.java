@@ -6,7 +6,6 @@
  * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  ******************************************************************************/
 
-
 package net.onrc.openvirtex.messages;
 
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
@@ -14,17 +13,20 @@ import net.onrc.openvirtex.elements.datapath.PhysicalSwitch;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.OFError;
 
-public class OVXError extends OFError implements Virtualizable, Devirtualizable {
+import org.projectfloodlight.openflow.protocol.OFErrorMsg;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.errormsg.OFErrorMsgs;
 
-	 private final Logger log      = LogManager.getLogger(OVXError.class
+public class OVXError implements Virtualizable, Devirtualizable {
+	private final Logger log = LogManager.getLogger(OVXError.class
              .getName());
+	
+	OFErrorMsg emsg;
 	
 	@Override
 	public void devirtualize(final OVXSwitch sw) {
 		// TODO Auto-generated method stub
-
 	}
 
 	@Override
@@ -33,52 +35,53 @@ public class OVXError extends OFError implements Virtualizable, Devirtualizable 
 		 * In the future parse them and forward to 
 		 * controller if need be.
 		 */
-		log.error(getErrorString(this));
-
+		log.error(getErrorString(emsg));
+	}
+	
+	public OVXError(final OFErrorMsg emsg) {
+		this.emsg = emsg;
+	}
+	
+	public OFErrorMsg getErrorMsg() {
+		return emsg;
 	}
 	
 	 /**
-     * Get a useable error string from the OFError.
+     * Get a useable error string from the OFErrorMsg.
      * @param error
      * @return
      */
-    private static String getErrorString(OFError error) {
+    private static String getErrorString(OFErrorMsg error) {
         // TODO: this really should be OFError.toString. Sigh.
-        int etint = 0xffff & error.getErrorType();
-        if (etint < 0 || etint >= OFErrorType.values().length) {
-            return String.format("Unknown error type %d", etint);
+    	OFErrorMsgs err_msg = OFFactories.getFactory(error.getVersion()).errorMsgs();
+    	
+    	String error_name = error.getErrType().name();
+    	
+        switch (error.getErrType()) {
+            case HELLO_FAILED:
+            	return String.format("Error %s %s", error_name, err_msg.buildHelloFailedErrorMsg());
+            case BAD_REQUEST:
+            	return String.format("Error %s %s", error_name, err_msg.buildBadRequestErrorMsg());
+            case BAD_ACTION:
+            	return String.format("Error %s %s", error_name, err_msg.buildBadActionErrorMsg());
+            case FLOW_MOD_FAILED:
+            	return String.format("Error %s %s", error_name, err_msg.buildFlowModFailedErrorMsg());
+            case PORT_MOD_FAILED:
+            	return String.format("Error %s %s", error_name, err_msg.buildPortModFailedErrorMsg());
+            case QUEUE_OP_FAILED:
+            	return String.format("Error %s %s", error_name, err_msg.buildQueueOpFailedErrorMsg());
+            case EXPERIMENTER:
+                return String.format("Error %s %s", error_name, err_msg.buildExperimenterErrorMsg());
+            case BAD_INSTRUCTION:
+                return String.format("Error %s %s", error_name, err_msg.buildBadInstructionErrorMsg());
+            case BAD_MATCH:
+            	return String.format("Error %s %s", error_name, err_msg.buildBadActionErrorMsg());
+            case SWITCH_CONFIG_FAILED:
+            	return String.format("Error %s %s", error_name, err_msg.buildSwitchConfigFailedErrorMsg());
+            case ROLE_REQUEST_FAILED:
+            	return String.format("Error %s %s", error_name, err_msg.buildRoleRequestFailedErrorMsg());	
+            default:
+            	return String.format("Unknown error type");
         }
-        OFErrorType et = OFErrorType.values()[etint];
-        switch (et) {
-            case OFPET_HELLO_FAILED:
-                OFHelloFailedCode hfc =
-                    OFHelloFailedCode.values()[0xffff & error.getErrorCode()];
-                return String.format("Error %s %s", et, hfc);
-            case OFPET_BAD_REQUEST:
-                OFBadRequestCode brc =
-                    OFBadRequestCode.values()[0xffff & error.getErrorCode()];
-                return String.format("Error %s %s", et, brc);
-            case OFPET_BAD_ACTION:
-                OFBadActionCode bac =
-                    OFBadActionCode.values()[0xffff & error.getErrorCode()];
-                return String.format("Error %s %s", et, bac);
-            case OFPET_FLOW_MOD_FAILED:
-                OFFlowModFailedCode fmfc =
-                    OFFlowModFailedCode.values()[0xffff & error.getErrorCode()];
-                return String.format("Error %s %s", et, fmfc);
-            case OFPET_PORT_MOD_FAILED:
-                OFPortModFailedCode pmfc =
-                    OFPortModFailedCode.values()[0xffff & error.getErrorCode()];
-                return String.format("Error %s %s", et, pmfc);
-            case OFPET_QUEUE_OP_FAILED:
-                OFQueueOpFailedCode qofc =
-                    OFQueueOpFailedCode.values()[0xffff & error.getErrorCode()];
-                return String.format("Error %s %s", et, qofc);
-            case OFPET_VENDOR_ERROR:
-                // no codes known for vendor error
-                return String.format("Error %s", et);
-        }
-        return null;
     }
-
 }

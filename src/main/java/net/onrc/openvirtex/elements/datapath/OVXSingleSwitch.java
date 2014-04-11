@@ -8,30 +8,25 @@
 package net.onrc.openvirtex.elements.datapath;
 
 
-
-
 import net.onrc.openvirtex.elements.port.OVXPort;
 import net.onrc.openvirtex.exceptions.SwitchMappingException;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import org.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFVersion;
 
 public class OVXSingleSwitch extends OVXSwitch {
-	
-	
-	
 
 	private static Logger log = LogManager.getLogger(OVXSingleSwitch.class
 			.getName());
 
-	public OVXSingleSwitch(final long switchId, final int tenantId) {
-		super(switchId, tenantId);
+	public OVXSingleSwitch(final long switchId, final int tenantId, final OFVersion ofversion) {
+		super(switchId, tenantId, ofversion);
 	}
 
 	@Override
-	public boolean removePort(final Short portNumber) {
+	public boolean removePort(final Integer portNumber) {
 		if (!this.portMap.containsKey(portNumber)) {
 			return false;
 		} else {
@@ -40,9 +35,7 @@ public class OVXSingleSwitch extends OVXSwitch {
 			return true;
 		}
 	}
-
 	
-
 	@Override
 	// TODO: this is probably not optimal
 	public void sendSouth(final OFMessage msg, final OVXPort inPort) {
@@ -52,7 +45,7 @@ public class OVXSingleSwitch extends OVXSwitch {
 	}
 
 	@Override
-	public int translate(final OFMessage ofm, final OVXPort inPort) {
+	public long translate(final OFMessage ofm, final OVXPort inPort) {
 		// get new xid from only PhysicalSwitch tied to this switch
 		PhysicalSwitch psw = getPhySwitch(inPort);
 		return psw.translate(ofm, this);

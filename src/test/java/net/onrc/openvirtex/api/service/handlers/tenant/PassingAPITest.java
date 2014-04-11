@@ -12,6 +12,10 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFPortDesc;
+import org.projectfloodlight.openflow.protocol.OFVersion;
+
 import junit.framework.Assert;
 import junit.framework.TestSuite;
 import net.onrc.openvirtex.api.service.handlers.TenantHandler;
@@ -23,12 +27,10 @@ import net.onrc.openvirtex.elements.network.OVXNetwork;
 import net.onrc.openvirtex.elements.network.PhysicalNetwork;
 import net.onrc.openvirtex.elements.port.PhysicalPort;
 
-import org.openflow.protocol.OFPhysicalPort;
-
 import com.thetransactioncompany.jsonrpc2.JSONRPC2Response;
 
 public class PassingAPITest extends AbstractAPICalls {
-
+	static final OFVersion ofversion = OFVersion.OF_10;
 	static final int MAX_TENANTS = 4;
 	static final OpenVirteXController ctrl = 
 			new OpenVirteXController(new CmdLineSettings());
@@ -91,10 +93,10 @@ public class PassingAPITest extends AbstractAPICalls {
 		final PhysicalSwitch sw2 = new PhysicalSwitch(2);
 		PhysicalNetwork.getInstance().addSwitch(sw1);
 		PhysicalNetwork.getInstance().addSwitch(sw2);
-		final PhysicalPort p1 = new PhysicalPort(new OFPhysicalPort(), sw1,
-				false);
-		final PhysicalPort p2 = new PhysicalPort(new OFPhysicalPort(), sw2,
-				false);
+		final OFPortDesc portdesc1 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc2 = OFFactories.getFactory(ofversion).buildPortDesc().build();		
+		final PhysicalPort p1 = new PhysicalPort(portdesc1, sw1, false);
+		final PhysicalPort p2 = new PhysicalPort(portdesc2, sw2, false);
 		PhysicalNetwork.getInstance().createLink(p1, p2);
 		PhysicalNetwork.getInstance().createLink(p2, p1);
 		super.createNetwork();
@@ -118,16 +120,16 @@ public class PassingAPITest extends AbstractAPICalls {
 	public void testCreatePort() {
 		final TestSwitch sw = new TestSwitch(1);
 		PhysicalNetwork.getInstance().addSwitch(sw);
-		final PhysicalPort port = new PhysicalPort(new OFPhysicalPort(), sw,
-				true);
+		final OFPortDesc portdesc = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final PhysicalPort port = new PhysicalPort(portdesc, sw, true);
 		port.setHardwareAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
-		port.setPortNumber((short)1);
+		port.setPortNumber(1);
 		sw.addPort(port);
 
 		super.createNetwork();
 		super.createSwitch(1, Collections.singletonList(1));
 
-		final JSONRPC2Response resp = super.createPort(1, (long) 1, (short) 1);
+		final JSONRPC2Response resp = super.createPort(1, (long) 1, 1);
 
 		Assert.assertNull("CreateOVXPort should not return null",
 				resp.getError());
@@ -144,15 +146,15 @@ public class PassingAPITest extends AbstractAPICalls {
 	public void testConnectHost() {
 		final TestSwitch sw1 = new TestSwitch(1);
 		PhysicalNetwork.getInstance().addSwitch(sw1);
-		final PhysicalPort port = new PhysicalPort(new OFPhysicalPort(), sw1,
-				true);
+		final OFPortDesc portdesc1 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final PhysicalPort port = new PhysicalPort(portdesc1, sw1, true);
 		port.setHardwareAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
-		port.setPortNumber((short)1);
+		port.setPortNumber(1);
 		sw1.addPort(port);
 
 		super.createNetwork();
 		super.createSwitch(1, Collections.singletonList(1));
-		super.createPort(1, (long) 1, (short) 1);
+		super.createPort(1, (long) 1, 1);
 		final JSONRPC2Response resp = super.connectHost(1, (long) 46200400562356225L, (short) 1,
 				"00:00:00:00:00:01");
 
@@ -175,14 +177,13 @@ public class PassingAPITest extends AbstractAPICalls {
 		final TestSwitch sw2 = new TestSwitch(2);
 		PhysicalNetwork.getInstance().addSwitch(sw1);
 		PhysicalNetwork.getInstance().addSwitch(sw2);
-		final PhysicalPort p1 = new PhysicalPort(new OFPhysicalPort(), sw1,
-				false);
+		final OFPortDesc portdesc1 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final PhysicalPort p1 = new PhysicalPort(portdesc1, sw1, false);
 		p1.setHardwareAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
-		p1.setPortNumber((short)1);
+		p1.setPortNumber(1);
 		sw1.addPort(p1);
-
-		final PhysicalPort p2 = new PhysicalPort(new OFPhysicalPort(), sw2,
-				false);
+		final OFPortDesc portdesc2 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final PhysicalPort p2 = new PhysicalPort(portdesc2, sw2, false);
 		p2.setHardwareAddress(new byte[] { 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 });
 		p2.setPortNumber((short)1);
 		sw2.addPort(p2);
@@ -191,8 +192,8 @@ public class PassingAPITest extends AbstractAPICalls {
 
 		super.createSwitch(1, Collections.singletonList(1));
 		super.createSwitch(1, Collections.singletonList(2));
-		super.createPort(1, (long) 1, (short) 1);
-		super.createPort(1, (long) 2, (short) 1);
+		super.createPort(1, (long) 1, 1);
+		super.createPort(1, (long) 2, 1);
 
 		JSONRPC2Response resp = super.connectLink(1, (long) 46200400562356225L, (short)1, (long) 46200400562356226L, 
 				(short)1, "manual" , (byte)0);
@@ -237,19 +238,24 @@ public class PassingAPITest extends AbstractAPICalls {
 		final TestSwitch sw2 = new TestSwitch(2);
 		PhysicalNetwork.getInstance().addSwitch(sw1);
 		PhysicalNetwork.getInstance().addSwitch(sw2);
-		final PhysicalPort p1 = new PhysicalPort(new OFPhysicalPort(), sw1, false);
+		final OFPortDesc portdesc1 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc2 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc3 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc4 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+
+		final PhysicalPort p1 = new PhysicalPort(portdesc1, sw1, false);
 		p1.setHardwareAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
 		p1.setPortNumber((short)1);
 		sw1.addPort(p1);
-		final PhysicalPort p2 = new PhysicalPort(new OFPhysicalPort(), sw1, true);
+		final PhysicalPort p2 = new PhysicalPort(portdesc2, sw1, true);
 		p2.setHardwareAddress(new byte[] { 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c });
 		p2.setPortNumber((short)2);
 		sw1.addPort(p2);
-		final PhysicalPort p3 = new PhysicalPort(new OFPhysicalPort(), sw2, false);
+		final PhysicalPort p3 = new PhysicalPort(portdesc3, sw2, false);
 		p3.setHardwareAddress(new byte[] { 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 });
 		p3.setPortNumber((short)1);
 		sw2.addPort(p3);
-		final PhysicalPort p4 = new PhysicalPort(new OFPhysicalPort(), sw2, true);
+		final PhysicalPort p4 = new PhysicalPort(portdesc4, sw2, true);
 		p4.setHardwareAddress(new byte[] { 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c });
 		p4.setPortNumber((short)2);
 		sw2.addPort(p4);
@@ -262,8 +268,8 @@ public class PassingAPITest extends AbstractAPICalls {
 		l.add(1);
 		l.add(2);
 		super.createSwitch(1, l);
-		super.createPort(1, (long) 1, (short) 2);
-		super.createPort(1, (long) 2, (short) 2);
+		super.createPort(1, (long) 1, 2);
+		super.createPort(1, (long) 2, 2);
 		super.connectHost(1, (long)46200400562356225L, (short)1, "00:00:00:00:00:01");
 		super.connectHost(1, (long)46200400562356225L, (short)2, "00:00:00:00:00:02");
 
@@ -289,19 +295,24 @@ public class PassingAPITest extends AbstractAPICalls {
 		final TestSwitch sw2 = new TestSwitch(2);
 		PhysicalNetwork.getInstance().addSwitch(sw1);
 		PhysicalNetwork.getInstance().addSwitch(sw2);
-		final PhysicalPort p1 = new PhysicalPort(new OFPhysicalPort(), sw1, false);
+		final OFPortDesc portdesc1 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc2 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc3 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc4 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+	
+		final PhysicalPort p1 = new PhysicalPort(portdesc1, sw1, false);
 		p1.setHardwareAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
 		p1.setPortNumber((short)1);
 		sw1.addPort(p1);
-		final PhysicalPort p2 = new PhysicalPort(new OFPhysicalPort(), sw1, true);
+		final PhysicalPort p2 = new PhysicalPort(portdesc2, sw1, true);
 		p2.setHardwareAddress(new byte[] { 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c });
 		p2.setPortNumber((short)2);
 		sw1.addPort(p2);
-		final PhysicalPort p3 = new PhysicalPort(new OFPhysicalPort(), sw2, false);
+		final PhysicalPort p3 = new PhysicalPort(portdesc3, sw2, false);
 		p3.setHardwareAddress(new byte[] { 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 });
 		p3.setPortNumber((short)1);
 		sw2.addPort(p3);
-		final PhysicalPort p4 = new PhysicalPort(new OFPhysicalPort(), sw2, true);
+		final PhysicalPort p4 = new PhysicalPort(portdesc4, sw2, true);
 		p4.setHardwareAddress(new byte[] { 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c });
 		p4.setPortNumber((short)2);
 		sw2.addPort(p4);
@@ -312,10 +323,10 @@ public class PassingAPITest extends AbstractAPICalls {
 		super.createNetwork();
 		super.createSwitch(1, Collections.singletonList(1));
 		super.createSwitch(1, Collections.singletonList(2));
-		super.createPort(1, (long) 1, (short) 1);
-		super.createPort(1, (long) 2, (short) 1);
-		super.createPort(1, (long) 1, (short) 2);
-		super.createPort(1, (long) 2, (short) 2);
+		super.createPort(1, (long) 1, 1);
+		super.createPort(1, (long) 2, 1);
+		super.createPort(1, (long) 1, 2);
+		super.createPort(1, (long) 2, 2);
 		super.connectHost(1, (long)46200400562356225L, (short)2, "00:00:00:00:00:01");
 		super.connectHost(1, (long)46200400562356226L, (short)2, "00:00:00:00:00:02");
 		super.connectLink(1, (long)46200400562356225L, (short) 1, (long)46200400562356226L, (short) 1, "manual", (byte) 0);
@@ -334,19 +345,24 @@ public class PassingAPITest extends AbstractAPICalls {
 		final TestSwitch sw2 = new TestSwitch(2);
 		PhysicalNetwork.getInstance().addSwitch(sw1);
 		PhysicalNetwork.getInstance().addSwitch(sw2);
-		final PhysicalPort p1 = new PhysicalPort(new OFPhysicalPort(), sw1, false);
+		final OFPortDesc portdesc1 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc2 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc3 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc4 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+
+		final PhysicalPort p1 = new PhysicalPort(portdesc1, sw1, false);
 		p1.setHardwareAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
 		p1.setPortNumber((short)1);
 		sw1.addPort(p1);
-		final PhysicalPort p2 = new PhysicalPort(new OFPhysicalPort(), sw1, true);
+		final PhysicalPort p2 = new PhysicalPort(portdesc2, sw1, true);
 		p2.setHardwareAddress(new byte[] { 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c });
 		p2.setPortNumber((short)2);
 		sw1.addPort(p2);
-		final PhysicalPort p3 = new PhysicalPort(new OFPhysicalPort(), sw2, false);
+		final PhysicalPort p3 = new PhysicalPort(portdesc3, sw2, false);
 		p3.setHardwareAddress(new byte[] { 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 });
 		p3.setPortNumber((short)1);
 		sw2.addPort(p3);
-		final PhysicalPort p4 = new PhysicalPort(new OFPhysicalPort(), sw2, true);
+		final PhysicalPort p4 = new PhysicalPort(portdesc4, sw2, true);
 		p4.setHardwareAddress(new byte[] { 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c });
 		p4.setPortNumber((short)2);
 		sw2.addPort(p4);
@@ -357,10 +373,10 @@ public class PassingAPITest extends AbstractAPICalls {
 		super.createNetwork();
 		super.createSwitch(1, Collections.singletonList(1));
 		super.createSwitch(1, Collections.singletonList(2));
-		super.createPort(1, (long) 1, (short) 1);
-		super.createPort(1, (long) 2, (short) 1);
-		super.createPort(1, (long) 1, (short) 2);
-		super.createPort(1, (long) 2, (short) 2);
+		super.createPort(1, (long) 1, 1);
+		super.createPort(1, (long) 2, 1);
+		super.createPort(1, (long) 1, 2);
+		super.createPort(1, (long) 2, 2);
 		super.connectHost(1, (long)46200400562356225L, (short)2, "00:00:00:00:00:01");
 		super.connectHost(1, (long)46200400562356226L, (short)2, "00:00:00:00:00:02");
 		super.connectLink(1, (long)46200400562356225L, (short) 1, (long)46200400562356226L, (short) 1, "manual", (byte) 0);
@@ -379,19 +395,24 @@ public class PassingAPITest extends AbstractAPICalls {
 		final TestSwitch sw2 = new TestSwitch(2);
 		PhysicalNetwork.getInstance().addSwitch(sw1);
 		PhysicalNetwork.getInstance().addSwitch(sw2);
-		final PhysicalPort p1 = new PhysicalPort(new OFPhysicalPort(), sw1, false);
+		final OFPortDesc portdesc1 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc2 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc3 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc4 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+	
+		final PhysicalPort p1 = new PhysicalPort(portdesc1, sw1, false);
 		p1.setHardwareAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
 		p1.setPortNumber((short)1);
 		sw1.addPort(p1);
-		final PhysicalPort p2 = new PhysicalPort(new OFPhysicalPort(), sw1, true);
+		final PhysicalPort p2 = new PhysicalPort(portdesc2, sw1, true);
 		p2.setHardwareAddress(new byte[] { 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c });
 		p2.setPortNumber((short)2);
 		sw1.addPort(p2);
-		final PhysicalPort p3 = new PhysicalPort(new OFPhysicalPort(), sw2, false);
+		final PhysicalPort p3 = new PhysicalPort(portdesc3, sw2, false);
 		p3.setHardwareAddress(new byte[] { 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 });
 		p3.setPortNumber((short)1);
 		sw2.addPort(p3);
-		final PhysicalPort p4 = new PhysicalPort(new OFPhysicalPort(), sw2, true);
+		final PhysicalPort p4 = new PhysicalPort(portdesc4, sw2, true);
 		p4.setHardwareAddress(new byte[] { 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c });
 		p4.setPortNumber((short)2);
 		sw2.addPort(p4);
@@ -402,10 +423,10 @@ public class PassingAPITest extends AbstractAPICalls {
 		super.createNetwork();
 		super.createSwitch(1, Collections.singletonList(1));
 		super.createSwitch(1, Collections.singletonList(2));
-		super.createPort(1, (long) 1, (short) 1);
-		super.createPort(1, (long) 2, (short) 1);
-		super.createPort(1, (long) 1, (short) 2);
-		super.createPort(1, (long) 2, (short) 2);
+		super.createPort(1, (long) 1, 1);
+		super.createPort(1, (long) 2, 1);
+		super.createPort(1, (long) 1, 2);
+		super.createPort(1, (long) 2, 2);
 		super.connectHost(1, (long)46200400562356225L, (short)2, "00:00:00:00:00:01");
 		super.connectHost(1, (long)46200400562356226L, (short)2, "00:00:00:00:00:02");
 		super.connectLink(1, (long)46200400562356225L, (short) 1, (long)46200400562356226L, (short) 1, "manual", (byte) 0);
@@ -424,19 +445,24 @@ public class PassingAPITest extends AbstractAPICalls {
 		final TestSwitch sw2 = new TestSwitch(2);
 		PhysicalNetwork.getInstance().addSwitch(sw1);
 		PhysicalNetwork.getInstance().addSwitch(sw2);
-		final PhysicalPort p1 = new PhysicalPort(new OFPhysicalPort(), sw1, false);
+		final OFPortDesc portdesc1 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc2 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc3 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc4 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+	
+		final PhysicalPort p1 = new PhysicalPort(portdesc1, sw1, false);
 		p1.setHardwareAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
 		p1.setPortNumber((short)1);
 		sw1.addPort(p1);
-		final PhysicalPort p2 = new PhysicalPort(new OFPhysicalPort(), sw1, true);
+		final PhysicalPort p2 = new PhysicalPort(portdesc2, sw1, true);
 		p2.setHardwareAddress(new byte[] { 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c });
 		p2.setPortNumber((short)2);
 		sw1.addPort(p2);
-		final PhysicalPort p3 = new PhysicalPort(new OFPhysicalPort(), sw2, false);
+		final PhysicalPort p3 = new PhysicalPort(portdesc3, sw2, false);
 		p3.setHardwareAddress(new byte[] { 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 });
 		p3.setPortNumber((short)1);
 		sw2.addPort(p3);
-		final PhysicalPort p4 = new PhysicalPort(new OFPhysicalPort(), sw2, true);
+		final PhysicalPort p4 = new PhysicalPort(portdesc4, sw2, true);
 		p4.setHardwareAddress(new byte[] { 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c });
 		p4.setPortNumber((short)2);
 		sw2.addPort(p4);
@@ -447,10 +473,10 @@ public class PassingAPITest extends AbstractAPICalls {
 		super.createNetwork();
 		super.createSwitch(1, Collections.singletonList(1));
 		super.createSwitch(1, Collections.singletonList(2));
-		super.createPort(1, (long) 1, (short) 1);
-		super.createPort(1, (long) 2, (short) 1);
-		super.createPort(1, (long) 1, (short) 2);
-		super.createPort(1, (long) 2, (short) 2);
+		super.createPort(1, (long) 1, 1);
+		super.createPort(1, (long) 2, 1);
+		super.createPort(1, (long) 1, 2);
+		super.createPort(1, (long) 2, 2);
 		super.connectHost(1, (long)46200400562356225L, (short)2, "00:00:00:00:00:01");
 		super.connectHost(1, (long)46200400562356226L, (short)2, "00:00:00:00:00:02");
 		super.connectLink(1, (long)46200400562356225L, (short) 1, (long)46200400562356226L, (short) 1, "manual", (byte) 0);
@@ -470,19 +496,23 @@ public class PassingAPITest extends AbstractAPICalls {
 		final TestSwitch sw2 = new TestSwitch(2);
 		PhysicalNetwork.getInstance().addSwitch(sw1);
 		PhysicalNetwork.getInstance().addSwitch(sw2);
-		final PhysicalPort p1 = new PhysicalPort(new OFPhysicalPort(), sw1, false);
+		final OFPortDesc portdesc1 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc2 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc3 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc4 = OFFactories.getFactory(ofversion).buildPortDesc().build();	
+		final PhysicalPort p1 = new PhysicalPort(portdesc1, sw1, false);
 		p1.setHardwareAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
 		p1.setPortNumber((short)1);
 		sw1.addPort(p1);
-		final PhysicalPort p2 = new PhysicalPort(new OFPhysicalPort(), sw1, true);
+		final PhysicalPort p2 = new PhysicalPort(portdesc2, sw1, true);
 		p2.setHardwareAddress(new byte[] { 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c });
 		p2.setPortNumber((short)2);
 		sw1.addPort(p2);
-		final PhysicalPort p3 = new PhysicalPort(new OFPhysicalPort(), sw2, false);
+		final PhysicalPort p3 = new PhysicalPort(portdesc3, sw2, false);
 		p3.setHardwareAddress(new byte[] { 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 });
 		p3.setPortNumber((short)1);
 		sw2.addPort(p3);
-		final PhysicalPort p4 = new PhysicalPort(new OFPhysicalPort(), sw2, true);
+		final PhysicalPort p4 = new PhysicalPort(portdesc4, sw2, true);
 		p4.setHardwareAddress(new byte[] { 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c });
 		p4.setPortNumber((short)2);
 		sw2.addPort(p4);
@@ -493,10 +523,10 @@ public class PassingAPITest extends AbstractAPICalls {
 		super.createNetwork();
 		super.createSwitch(1, Collections.singletonList(1));
 		super.createSwitch(1, Collections.singletonList(2));
-		super.createPort(1, (long) 1, (short) 1);
-		super.createPort(1, (long) 2, (short) 1);
-		super.createPort(1, (long) 1, (short) 2);
-		super.createPort(1, (long) 2, (short) 2);
+		super.createPort(1, (long) 1, 1);
+		super.createPort(1, (long) 2, 1);
+		super.createPort(1, (long) 1, 2);
+		super.createPort(1, (long) 2, 2);
 		super.connectHost(1, (long)46200400562356225L, (short)2, "00:00:00:00:00:01");
 		super.connectHost(1, (long)46200400562356226L, (short)2, "00:00:00:00:00:02");
 		super.connectLink(1, (long)46200400562356225L, (short) 1, (long)46200400562356226L, (short) 1, "manual", (byte) 0);
@@ -519,19 +549,24 @@ public class PassingAPITest extends AbstractAPICalls {
 		final TestSwitch sw2 = new TestSwitch(2);
 		PhysicalNetwork.getInstance().addSwitch(sw1);
 		PhysicalNetwork.getInstance().addSwitch(sw2);
-		final PhysicalPort p1 = new PhysicalPort(new OFPhysicalPort(), sw1, false);
+		final OFPortDesc portdesc1 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc2 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc3 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc4 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		
+		final PhysicalPort p1 = new PhysicalPort(portdesc1, sw1, false);
 		p1.setHardwareAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
 		p1.setPortNumber((short)1);
 		sw1.addPort(p1);
-		final PhysicalPort p2 = new PhysicalPort(new OFPhysicalPort(), sw1, true);
+		final PhysicalPort p2 = new PhysicalPort(portdesc2, sw1, true);
 		p2.setHardwareAddress(new byte[] { 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c });
 		p2.setPortNumber((short)2);
 		sw1.addPort(p2);
-		final PhysicalPort p3 = new PhysicalPort(new OFPhysicalPort(), sw2, false);
+		final PhysicalPort p3 = new PhysicalPort(portdesc3, sw2, false);
 		p3.setHardwareAddress(new byte[] { 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 });
 		p3.setPortNumber((short)1);
 		sw2.addPort(p3);
-		final PhysicalPort p4 = new PhysicalPort(new OFPhysicalPort(), sw2, true);
+		final PhysicalPort p4 = new PhysicalPort(portdesc4, sw2, true);
 		p4.setHardwareAddress(new byte[] { 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c });
 		p4.setPortNumber((short)2);
 		sw2.addPort(p4);
@@ -544,8 +579,8 @@ public class PassingAPITest extends AbstractAPICalls {
 		l.add(1);
 		l.add(2);
 		super.createSwitch(1, l);
-		super.createPort(1, (long) 1, (short) 2);
-		super.createPort(1, (long) 2, (short) 2);
+		super.createPort(1, (long) 1, 2);
+		super.createPort(1, (long) 2, 2);
 		super.connectHost(1, (long)46200400562356225L, (short)1, "00:00:00:00:00:01");
 		super.connectHost(1, (long)46200400562356225L, (short)2, "00:00:00:00:00:02");
 		super.connectRoute(1, 46200400562356225L, (short)1, (short)2, "1/1-2/1", (byte) 100);
@@ -568,19 +603,24 @@ public class PassingAPITest extends AbstractAPICalls {
 		final TestSwitch sw2 = new TestSwitch(2);
 		PhysicalNetwork.getInstance().addSwitch(sw1);
 		PhysicalNetwork.getInstance().addSwitch(sw2);
-		final PhysicalPort p1 = new PhysicalPort(new OFPhysicalPort(), sw1, false);
+		final OFPortDesc portdesc1 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc2 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc3 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+		final OFPortDesc portdesc4 = OFFactories.getFactory(ofversion).buildPortDesc().build();
+
+		final PhysicalPort p1 = new PhysicalPort(portdesc1, sw1, false);
 		p1.setHardwareAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
 		p1.setPortNumber((short)1);
 		sw1.addPort(p1);
-		final PhysicalPort p2 = new PhysicalPort(new OFPhysicalPort(), sw1, true);
+		final PhysicalPort p2 = new PhysicalPort(portdesc2, sw1, true);
 		p2.setHardwareAddress(new byte[] { 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c });
 		p2.setPortNumber((short)2);
 		sw1.addPort(p2);
-		final PhysicalPort p3 = new PhysicalPort(new OFPhysicalPort(), sw2, false);
+		final PhysicalPort p3 = new PhysicalPort(portdesc3, sw2, false);
 		p3.setHardwareAddress(new byte[] { 0x11, 0x12, 0x13, 0x14, 0x15, 0x16 });
 		p3.setPortNumber((short)1);
 		sw2.addPort(p3);
-		final PhysicalPort p4 = new PhysicalPort(new OFPhysicalPort(), sw2, true);
+		final PhysicalPort p4 = new PhysicalPort(portdesc4, sw2, true);
 		p4.setHardwareAddress(new byte[] { 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c });
 		p4.setPortNumber((short)2);
 		sw2.addPort(p4);
@@ -591,10 +631,10 @@ public class PassingAPITest extends AbstractAPICalls {
 		super.createNetwork();
 		super.createSwitch(1, Collections.singletonList(1));
 		super.createSwitch(1, Collections.singletonList(2));
-		super.createPort(1, (long) 1, (short) 1);
-		super.createPort(1, (long) 2, (short) 1);
-		super.createPort(1, (long) 1, (short) 2);
-		super.createPort(1, (long) 2, (short) 2);
+		super.createPort(1, (long) 1, 1);
+		super.createPort(1, (long) 2, 1);
+		super.createPort(1, (long) 1, 2);
+		super.createPort(1, (long) 2, 2);
 		super.connectHost(1, (long)46200400562356225L, (short)2, "00:00:00:00:00:01");
 		super.connectHost(1, (long)46200400562356226L, (short)2, "00:00:00:00:00:02");
 		super.connectLink(1, (long)46200400562356225L, (short) 1, (long)46200400562356226L, (short) 1, "manual", (byte) 0);

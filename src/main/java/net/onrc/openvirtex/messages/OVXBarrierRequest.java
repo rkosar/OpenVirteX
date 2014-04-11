@@ -11,15 +11,15 @@ package net.onrc.openvirtex.messages;
 
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 
-import org.openflow.protocol.OFBarrierRequest;
+public class OVXBarrierRequest implements Devirtualizable {
 
-public class OVXBarrierRequest extends OFBarrierRequest implements
-		Devirtualizable {
-
+	public OVXBarrierRequest() 
+	{
+	}
+	
 	@Override
 	public void devirtualize(final OVXSwitch sw) {
 		// TODO Auto-generated method stub
 
 	}
-
 }

@@ -16,7 +16,9 @@ import net.onrc.openvirtex.elements.datapath.Switch;
 
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.handler.timeout.IdleStateAwareChannelHandler;
-import org.openflow.protocol.OFType;
+import org.projectfloodlight.openflow.protocol.OFFactory;
+import org.projectfloodlight.openflow.protocol.OFType;
+import org.projectfloodlight.openflow.protocol.OFVersion;
 
 public abstract class OFChannelHandler extends IdleStateAwareChannelHandler {
 
@@ -24,6 +26,8 @@ public abstract class OFChannelHandler extends IdleStateAwareChannelHandler {
 	protected Switch sw;
 	protected Channel channel;
 	protected OpenVirteXController ctrl;
+	protected OFVersion ofversion;
+	protected OFFactory offactory;
 
 	public abstract boolean isHandShakeComplete();
 

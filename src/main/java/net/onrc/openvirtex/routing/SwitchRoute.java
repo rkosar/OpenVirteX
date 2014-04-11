@@ -8,7 +8,6 @@
 package net.onrc.openvirtex.routing;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -25,7 +24,6 @@ import net.onrc.openvirtex.elements.OVXMap;
 import net.onrc.openvirtex.elements.Persistable;
 import net.onrc.openvirtex.elements.address.IPMapper;
 import net.onrc.openvirtex.elements.datapath.OVXBigSwitch;
-import net.onrc.openvirtex.elements.datapath.OVXFlowTable;
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 import net.onrc.openvirtex.elements.datapath.PhysicalSwitch;
 import net.onrc.openvirtex.elements.link.Link;
@@ -39,17 +37,22 @@ import net.onrc.openvirtex.exceptions.IndexOutOfBoundException;
 import net.onrc.openvirtex.exceptions.LinkMappingException;
 import net.onrc.openvirtex.exceptions.NetworkMappingException;
 import net.onrc.openvirtex.messages.OVXFlowMod;
-import net.onrc.openvirtex.packet.Ethernet;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.OFFlowMod;
-import org.openflow.protocol.OFPacketOut;
-import org.openflow.protocol.OFPort;
-import org.openflow.protocol.action.OFAction;
-import org.openflow.protocol.action.OFActionOutput;
-import org.openflow.protocol.action.OFActionType;
-import org.openflow.util.U8;
+import org.projectfloodlight.openflow.protocol.OFActionType;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFFlowMod;
+import org.projectfloodlight.openflow.protocol.OFFlowModCommand;
+import org.projectfloodlight.openflow.protocol.action.OFAction;
+import org.projectfloodlight.openflow.protocol.action.OFActionOutput;
+import org.projectfloodlight.openflow.protocol.match.Match;
+import org.projectfloodlight.openflow.protocol.match.MatchField;
+import org.projectfloodlight.openflow.types.EthType;
+import org.projectfloodlight.openflow.types.OFBufferId;
+import org.projectfloodlight.openflow.types.OFPort;
+import org.projectfloodlight.openflow.types.U8;
+
 
 /**
  * Route within a Big Switch abstraction
@@ -209,27 +212,27 @@ public class SwitchRoute extends Link<OVXPort, PhysicalSwitch> implements Persis
 		for (OVXFlowMod fe : flows) {
 			for(OFAction act : fe.getActions()) {
 				if (act.getType() == OFActionType.OUTPUT && 
-						fe.getMatch().getInputPort() == this.getSrcPort().getPortNumber() && 
-						((OFActionOutput) act).getPort() == this.getDstPort().getPortNumber()) {
-					log.info("Virtual network {}, switch {}, route {} between ports {}-{}: switch fm {}", this.getTenantId(), 
-							this.getSrcPort().getParentSwitch().getSwitchName(), this.getRouteId(), this.getSrcPort().getPortNumber(), 
-							this.getDstPort().getPortNumber(),fe);
+						fe.getMatch().get(MatchField.IN_PORT).getPortNumber() == this.getSrcPort().getPortNumber() && 
+						((OFActionOutput) act).getPort().getPortNumber() == this.getDstPort().getPortNumber()) {
+					log.info("Virtual network {}, switch {}, route {}: switch fm {}", this.getTenantId(), 
+							this.getSrcPort().getParentSwitch().getSwitchName(), this.getRouteId(), fe);
 					counter++;
 					
-					OVXFlowMod fm = fe.clone();
-					fm.setCookie(((OVXFlowTable) this.getSrcPort().getParentSwitch().getFlowTable()).getCookie(fe, true));
-					this.generateRouteFMs(fm);
-					this.generateFirstFM(fm);
+					this.generateRouteFMs(fe.clone());
+					this.generateFirstFM(fe.clone());
 				}
 			}
 		}
-		log.info("Virtual network {}, switch {}, route {} between ports {}-{}: {} flow-mod switched to the new path", this.getTenantId(), 
-				this.getSrcPort().getParentSwitch().getSwitchName(), this.getRouteId(), this.getSrcPort().getPortNumber(), 
-				this.getDstPort().getPortNumber(), counter);
+		log.info("Virtual network {}, switch {}, route {}: {} flow-mod switched to the new path", this.getTenantId(), 
+				this.getSrcPort().getParentSwitch().getSwitchName(), this.getRouteId(), counter);
 	}
 
 	public void generateRouteFMs(final OVXFlowMod fm) {
+		fm.setPhysicalCookie();
 		// This list includes all the actions that have to be applied at the end of the route
+		
+		Match fmmatch = fm.getMatch();
+		
 		final LinkedList<OFAction> outActions = new LinkedList<OFAction>();
 		/*
 		 * Check the outPort:
@@ -242,15 +245,18 @@ public class SwitchRoute extends Link<OVXPort, PhysicalSwitch> implements Persis
 		 * 		- generate the route FMs
 		 */
 		if (this.getDstPort().isEdge()) {
-			outActions.addAll(IPMapper.prependUnRewriteActions(fm.getMatch()));
+			outActions.addAll(IPMapper.prependUnRewriteActions(fmmatch));
 		} else {
 			final OVXLink link = this.getDstPort().getLink().getOutLink();
 			Integer linkId = link.getLinkId();
 			Integer flowId = 0;
 			try {
-				flowId = OVXMap.getInstance().getVirtualNetwork(this.getTenantId()).getFlowManager()
-						.storeFlowValues(fm.getMatch().getDataLayerSource(),
-								fm.getMatch().getDataLayerDestination());
+				flowId = OVXMap.getInstance()
+							   .getVirtualNetwork(this.getTenantId())
+							   .getFlowManager()
+							   .storeFlowValues(fmmatch.get(MatchField.ETH_SRC).getBytes(),
+									   fmmatch.get(MatchField.ETH_DST).getBytes());
+				
 				link.generateLinkFMs(fm.clone(), flowId);
 				outActions.addAll(new OVXLinkUtils(this.getTenantId(), linkId, flowId).setLinkFields());
 			} catch (IndexOutOfBoundException e) {
@@ -266,8 +272,8 @@ public class SwitchRoute extends Link<OVXPort, PhysicalSwitch> implements Persis
 		 * If the packet has L3 fields (e.g. NOT ARP), change the packet match:
 		 * 1) change the fields where the physical ips are stored
 		 */
-		if (fm.getMatch().getDataLayerType() == Ethernet.TYPE_IPv4)
-			IPMapper.rewriteMatch(this.getSrcPort().getTenantId(), fm.getMatch());
+		if (fmmatch.get(MatchField.ETH_TYPE) == EthType.IPv4)
+			IPMapper.rewriteMatch(this.getSrcPort().getTenantId(), fmmatch);
 
 		/*
 		 * Get the list of physical links mapped to this virtual link,
@@ -275,7 +281,7 @@ public class SwitchRoute extends Link<OVXPort, PhysicalSwitch> implements Persis
 		 */
 		PhysicalPort inPort = null;
 		PhysicalPort outPort = null;
-		fm.setBufferId(OFPacketOut.BUFFER_ID_NONE);
+		fm.setBufferId(OFBufferId.NO_BUFFER);
 
 		final SwitchRoute route = ((OVXBigSwitch) this.getSrcPort()
 				.getParentSwitch()).getRoute(this.getSrcPort(), this.getDstPort());
@@ -292,32 +298,77 @@ public class SwitchRoute extends Link<OVXPort, PhysicalSwitch> implements Persis
 		for (final PhysicalLink phyLink : reverseLinks) {
 			if (outPort != null) {
 				inPort = phyLink.getSrcPort();
-				fm.getMatch().setInputPort(inPort.getPortNumber());
-				fm.setLengthU(OFFlowMod.MINIMUM_LENGTH
-						+ OFActionOutput.MINIMUM_LENGTH);
-				fm.setActions(Arrays.asList((OFAction) new OFActionOutput(
-						outPort.getPortNumber(), (short) 0xffff)));
-				phyLink.getSrcPort().getParentSwitch().sendMsg(fm, phyLink.getSrcPort().getParentSwitch());
+				
+				Match match = fmmatch.createBuilder()
+						.setExact(MatchField.IN_PORT, OFPort.of(inPort.getPortNumber()))
+						.build();
+			
+				//			fm.setLengthU(OFFlowMod.MINIMUM_LENGTH
+				//+ OFActionOutput.MINIMUM_LENGTH);
+				
+				OFActionOutput oa = OFFactories.getFactory(this.sw.getVersion())
+						.actions()
+						.buildOutput()	   
+						.setPort(OFPort.of(outPort.getPortNumber()))
+						.setMaxLen(0x0000ffff)
+						.build();
+				
+				List<OFAction> actions = fm.getActions();
+				actions.add(oa);
+				
+				OFFlowMod ofm = OFFactories.getFactory(this.sw.getVersion())
+						.buildFlowModify()
+						.setMatch(match)
+						.setActions(actions)
+						.build();
+				
+				fm.setFlow(ofm);
+				
+				phyLink.getSrcPort().getParentSwitch().sendMsg(fm.getFlow(), phyLink.getSrcPort().getParentSwitch());
 				this.log.debug(
 						"Sending big-switch route intermediate fm to sw {}: {}",
 						phyLink.getSrcPort().getParentSwitch().getName(), fm);
-
 			} else {
 				/*
 				 * Last fm. Differs from the others because it can apply
 				 * additional actions to the flow
 				 */
-				fm.getMatch()
-				.setInputPort(phyLink.getSrcPort().getPortNumber());
+		
+				/*
 				int actLenght = 0;
-				outActions.add(new OFActionOutput(this.getDstPort()
-						.getPhysicalPortNumber(), (short) 0xffff));
-				fm.setActions(outActions);
+
+				outActions.add(new OFActionOutput(this.getDstPort().getPhysicalPortNumber(), (short) 0xffff));
 				for (final OFAction act : outActions) {
 					actLenght += act.getLengthU();
-				}
-				fm.setLengthU(OFFlowMod.MINIMUM_LENGTH + actLenght);
-				phyLink.getSrcPort().getParentSwitch().sendMsg(fm, phyLink.getSrcPort().getParentSwitch());
+				}*/
+
+				//fmmb.setInputPort(OFPort.of(phyLink.getSrcPort().getPortNumber()));
+				//fmmb.setActions(outActions);
+				//fmmb.setLengthU(OFFlowMod.MINIMUM_LENGTH + actLenght);
+
+				OFActionOutput oa = OFFactories.getFactory(this.sw.getVersion())
+						.actions()
+						.buildOutput()
+						.setPort(OFPort.of(this.getDstPort().getPortNumber()))
+						.setMaxLen(0xffff)
+						.build();
+				
+				outActions.add(oa);
+		
+				Match match = fmmatch.createBuilder()
+						.setExact(MatchField.IN_PORT, OFPort.of(phyLink.getSrcPort().getPortNumber()))
+						.build();
+				
+				
+				OFFlowMod ofm = OFFactories.getFactory(this.sw.getVersion())
+						.buildFlowModify()
+						.setMatch(match)
+						.setActions(outActions)
+						.build();
+				
+				fm.setFlow(ofm);
+
+				phyLink.getSrcPort().getParentSwitch().sendMsg(fm.getFlow(), phyLink.getSrcPort().getParentSwitch());
 				this.log.debug("Sending big-switch route last fm to sw {}: {}",
 						phyLink.getSrcPort().getParentSwitch().getName(), fm);
 			}
@@ -332,7 +383,11 @@ public class SwitchRoute extends Link<OVXPort, PhysicalSwitch> implements Persis
 	}
 
 	private void generateFirstFM(OVXFlowMod fm) {
-		fm.setBufferId(OFPacketOut.BUFFER_ID_NONE);
+		fm.setPhysicalCookie();
+		fm.setBufferId(OFBufferId.NO_BUFFER);
+		
+		Match fmmatch = fm.getMatch();
+		
 		final List<OFAction> approvedActions = new LinkedList<OFAction>();
 		if (this.getSrcPort().isLink()) {
 			OVXPort dstPort = null;
@@ -346,8 +401,10 @@ public class SwitchRoute extends Link<OVXPort, PhysicalSwitch> implements Persis
 			Integer flowId = 0;
 			if (link != null) {
 				try {
-					flowId = OVXMap.getInstance().getVirtualNetwork(this.getTenantId()).getFlowManager().
-							getFlowId(fm.getMatch().getDataLayerSource(), fm.getMatch().getDataLayerDestination());
+					flowId = OVXMap.getInstance()
+							.getVirtualNetwork(this.getTenantId())
+							.getFlowManager()
+							.getFlowId(fmmatch.get(MatchField.ETH_SRC).getBytes(), fmmatch.get(MatchField.ETH_DST).getBytes());
 				} catch (NetworkMappingException e) {
 					log.warn("SwitchRoute. Error retrieving the network with id {} for flowMod {}. Dropping packet...", 
 							this.getTenantId(), fm);
@@ -358,8 +415,10 @@ public class SwitchRoute extends Link<OVXPort, PhysicalSwitch> implements Persis
 					return;
 				}
 				OVXLinkUtils lUtils = new OVXLinkUtils(this.getTenantId(), link.getLinkId(), flowId);
-				lUtils.rewriteMatch(fm.getMatch());
-				IPMapper.rewriteMatch(this.getTenantId(), fm.getMatch());
+				lUtils.rewriteMatch(fmmatch);
+				IPMapper.rewriteMatch(this.getTenantId(), fmmatch);
+				
+				
 				approvedActions.addAll(lUtils.unsetLinkFields());
 			} else {
 				this.log.warn(
@@ -372,22 +431,29 @@ public class SwitchRoute extends Link<OVXPort, PhysicalSwitch> implements Persis
 			approvedActions.addAll(IPMapper.prependRewriteActions(this.getTenantId(), fm.getMatch()));
 		}
 
-		fm.getMatch().setInputPort(this.getSrcPort().getPhysicalPortNumber());
+		fmmatch = fmmatch.createBuilder().setExact(MatchField.IN_PORT, OFPort.of(this.getSrcPort().getPhysicalPortNumber())).build();
 
+		OFActionOutput.Builder oa = OFFactories.getFactory(fm.getVersion()).actions().buildOutput();
+		
 		//add the output action with the physical outPort (srcPort of the route)
 		if (this.getSrcPort().getPhysicalPortNumber() != this.getPathSrcPort().getPortNumber())
-			approvedActions.add(new OFActionOutput(this.getPathSrcPort().getPortNumber()));
+			oa.setPort(OFPort.of(this.getPathSrcPort().getPortNumber()));
+			//approvedActions.add(new OFActionOutput(this.getPathSrcPort().getPortNumber()));
 		else 
-			approvedActions.add(new OFActionOutput(OFPort.OFPP_IN_PORT.getValue()));
+			oa.setPort(OFPort.IN_PORT);
+			//approvedActions.add(new OFActionOutput(OFPort.OFPP_IN_PORT.getValue()));
 
-		fm.setCommand(OFFlowMod.OFPFC_MODIFY);
+		fm.setCommand(OFFlowModCommand.MODIFY);
 		fm.setActions(approvedActions);
-		int actLenght = 0;
-		for (final OFAction act : approvedActions) {
-			actLenght += act.getLengthU();
-		}
-		fm.setLengthU(OFFlowMod.MINIMUM_LENGTH + actLenght);
-		this.getSrcSwitch().sendMsg(fm, this.getSrcSwitch());
+		//int actLenght = 0;
+		//for (final OFAction act : approvedActions) {
+		//	actLenght += act.getLengthU();
+		//}
+		//fm.setLengthU(OFFlowMod.MINIMUM_LENGTH + actLenght);
+		
+
+		fm.setMatch(fmmatch);
+		this.getSrcSwitch().sendMsg(fm.getFlow(), this.getSrcSwitch());
 		this.log.debug("Sending big-switch route first fm to sw {}: {}", this.getSrcSwitch().getName(), fm);
 	}
 
@@ -497,29 +563,26 @@ public class SwitchRoute extends Link<OVXPort, PhysicalSwitch> implements Persis
 		Iterator<Byte> it = this.unusableRoutes.descendingKeySet().iterator();
 		while (it.hasNext()) {
 			Byte curPriority = it.next();
-			if (this.unusableRoutes.get(curPriority).contains(plink)) {
-				log.info("Reactivate all inactive paths for virtual network {} big-switch {} internal route {} between ports ({},{}) in virtual network {} ",
-						this.getTenantId(), 
-						this.getSrcPort().getParentSwitch().getSwitchName(), this.routeId, this.getSrcPort().getPortNumber(),
-						this.getDstPort().getPortNumber(), this.getTenantId());
-				
-				if (U8.f(this.getPriority()) >= U8.f(curPriority)) {
-					this.backupRoutes.put(curPriority, this.unusableRoutes.get(curPriority));
-				}
-				else {
-					
-					try {
-						List<PhysicalLink> backupLinks = new ArrayList<>(OVXMap.getInstance().getRoute(this));
-						Collections.copy(backupLinks,OVXMap.getInstance().getRoute(this));
-						this.backupRoutes.put(this.getPriority(), backupLinks);
-						this.switchPath(this.unusableRoutes.get(curPriority), curPriority);
-					} catch (LinkMappingException e) {
-						log.warn("No physical Links mapped to SwitchRoute? : {}", e);
-						return false;
-					}
-				}
-				it.remove();
+			log.info("Reactivate all inactive paths for virtual network {} big-switch {} internal route {} between ports ({},{}) in virtual network {} ",
+					this.getTenantId(), 
+					this.getSrcPort().getParentSwitch().getSwitchName(), this.routeId, this.getSrcPort().getPortNumber(),
+					this.getDstPort().getPortNumber(), this.getTenantId());
+			
+			if (U8.f(this.getPriority()) >= U8.f(curPriority)) {
+				this.backupRoutes.put(curPriority, this.unusableRoutes.get(curPriority));
 			}
+			else {
+				try {
+					List<PhysicalLink> backupLinks = new ArrayList<>(OVXMap.getInstance().getRoute(this));
+					Collections.copy(backupLinks,OVXMap.getInstance().getRoute(this));
+					this.backupRoutes.put(this.getPriority(), backupLinks);
+					this.switchPath(this.unusableRoutes.get(curPriority), curPriority);
+				} catch (LinkMappingException e) {
+					log.warn("No physical Links mapped to SwitchRoute? : {}", e);
+					return false;
+				}
+			}
+			it.remove();
 		}
 		return true;
 	}

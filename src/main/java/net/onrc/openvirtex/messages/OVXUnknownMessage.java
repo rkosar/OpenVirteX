@@ -12,23 +12,20 @@ package net.onrc.openvirtex.messages;
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 import net.onrc.openvirtex.elements.datapath.PhysicalSwitch;
 
-import org.openflow.protocol.OFMessage;
 
-public class OVXUnknownMessage extends OFMessage implements Virtualizable,
-		Devirtualizable {
+public class OVXUnknownMessage implements Virtualizable, Devirtualizable {
 
+	//extends OFMessage
+	
 	@Override
 	public void devirtualize(final OVXSwitch sw) {
 		// TODO: Log error, we should never receive this message here
 		return;
-
 	}
 
 	@Override
 	public void virtualize(final PhysicalSwitch sw) {
 		// TODO: Log error, we should never receive this message here
 		return;
-
 	}
-
 }

@@ -60,7 +60,7 @@ public class StartOVXPort extends ApiHandler<Map<String, Object>> {
 			this.log.info(
 					"Start virtual port {} on virtual switch {} in virtual network {}",
 					port, dpid, virtualNetwork.getTenantId());
-			OVXPort ovxPort = virtualNetwork.getSwitch(dpid.longValue()).getPort(port.shortValue());
+			OVXPort ovxPort = virtualNetwork.getSwitch(dpid.longValue()).getPort(port.intValue());
 			Map<String, Object> reply = new HashMap<String, Object>(ovxPort.getDBObject());
 			reply.put(TenantHandler.VDPID,  ovxPort.getParentSwitch().getSwitchId());
 			reply.put(TenantHandler.TENANT, ovxPort.getTenantId());

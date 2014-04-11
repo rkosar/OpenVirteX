@@ -9,7 +9,6 @@
 
 package net.onrc.openvirtex.core.io;
 
-import java.util.List;
 
 import net.onrc.openvirtex.messages.OVXMessageFactory;
 
@@ -17,7 +16,9 @@ import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.handler.codec.frame.FrameDecoder;
-import org.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFMessageReader;
 
 /**
  * Decode an openflow message from a netty Channel.
@@ -25,7 +26,7 @@ import org.openflow.protocol.OFMessage;
  * @author alshabib
  */
 public class OVXMessageDecoder extends FrameDecoder {
-
+	
 	OVXMessageFactory factory = OVXMessageFactory.getInstance();
 
 	@Override
@@ -35,9 +36,12 @@ public class OVXMessageDecoder extends FrameDecoder {
 			// if the channel is closed, there will be nothing to read.
 			return null;
 		}
-
-		final List<OFMessage> message = this.factory.parseMessage(buffer);
+		
+		OFMessageReader<OFMessage> reader = OFFactories.getGenericReader();
+	
+		OFMessage message = reader.readFrom(buffer);
+		//final List<OFMessage> message = this.factory.parseMessage(buffer);
+		
 		return message;
 	}
-
 }

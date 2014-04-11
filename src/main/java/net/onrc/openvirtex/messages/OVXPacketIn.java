@@ -30,37 +30,41 @@ import net.onrc.openvirtex.packet.ARP;
 import net.onrc.openvirtex.packet.Ethernet;
 import net.onrc.openvirtex.packet.IPv4;
 import net.onrc.openvirtex.util.MACAddress;
+import net.onrc.openvirtex.util.OVXUtil;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.OFMatch;
-import org.openflow.protocol.OFPacketIn;
-import org.openflow.protocol.OFPacketOut;
-import org.openflow.protocol.Wildcards.Flag;
-import org.openflow.util.U16;
+import org.projectfloodlight.openflow.protocol.match.*;
+import org.projectfloodlight.openflow.protocol.*;
+import org.projectfloodlight.openflow.types.*;
 
-public class OVXPacketIn extends OFPacketIn implements Virtualizable {
+public class OVXPacketIn implements Virtualizable {
 
-	private final Logger log      = LogManager.getLogger(OVXPacketIn.class
-			.getName());
+	private final Logger log      = LogManager.getLogger(
+			OVXPacketIn.class.getName());
+	
 	private PhysicalPort port     = null;
+	
 	private OVXPort		 ovxPort  = null;
+	
 	private Integer      tenantId = null;
-
+	
+	private OFPacketIn   pi       = null;
+	
 	@Override
 	public void virtualize(final PhysicalSwitch sw) {
-
-		OVXSwitch vSwitch = OVXMessageUtil.untranslateXid(this, sw);
+		OVXSwitch vSwitch = OVXMessageUtil.untranslateXid(this.pi, sw);
+		
 		/*
 		 * Fetching port from the physical switch
 		 */
-
-		short inport = this.getInPort();
-		port = sw.getPort(inport);
+		port = sw.getPort(this.pi.getInPort().getPortNumber());
 		Mappable map = sw.getMap();
-
-		final OFMatch match = new OFMatch();
-		match.loadFromPacket(this.getPacketData(), inport);
+		
+		//match.loadFromPacket(this.pi.getData(), inport);
+		Match match = OVXUtil.loadMatchFromEthPacket(this.pi.getData(), 
+				port.getPortNumber(), this.pi.getVersion());
+		
 		/*
 		 * Check whether this packet arrived on
 		 * an edge port.
@@ -70,26 +74,26 @@ public class OVXPacketIn extends OFPacketIn implements Virtualizable {
 		 * send to.
 		 */
 		if (this.port.isEdge()) {
+			this.log.warn("packet is on edge");
 			this.tenantId = this.fetchTenantId(match, map, true);
 			if (this.tenantId == null) {
 				this.log.warn(
 						"PacketIn {} does not belong to any virtual network; "
 								+ "dropping and installing a temporary drop rule",
-								this);
+								this.pi);
 				this.installDropRule(sw, match);
 				return;
 			}
 			
-			
 			/*
-			 * Checks on vSwitch and the virtual port done in swndPkt.
+			 * Checks on vSwitch and the virtual port done in sendPkt.
 			 */
 			vSwitch = this.fetchOVXSwitch(sw, vSwitch, map);
 			this.ovxPort = this.port.getOVXPort(this.tenantId, 0);
 			this.sendPkt(vSwitch, match, sw);
 			this.learnHostIP(match, map);
 			this.learnAddresses(match, map);
-			this.log.debug("Edge PacketIn {} sent to virtual network {}", this,
+			this.log.debug("Edge PacketIn {} sent to virtual network {}", this.pi,
 					this.tenantId);
 			return;
 		}
@@ -98,50 +102,74 @@ public class OVXPacketIn extends OFPacketIn implements Virtualizable {
 		 * Below handles packets traveling in the core.
 		 * 
 		 * 
-		 * The idea here si to rewrite the packets such that the controller is able to recognize them.
+		 * The idea here is to rewrite the packets such that the controller is able to recognize them.
 		 * 
 		 * For IPv4 packets and ARP packets this means rewriting the IP fields and possibly the mac
 		 * address fields if these packets are at the egress point of a virtual link.
 		 * 
 		 */
 
-		if (match.getDataLayerType() == Ethernet.TYPE_IPv4 || match.getDataLayerType() == Ethernet.TYPE_ARP) {
-			PhysicalIPAddress srcIP = new PhysicalIPAddress(match.getNetworkSource());
-			PhysicalIPAddress dstIP = new PhysicalIPAddress(match.getNetworkDestination());
-		
+		if (match.get(MatchField.ETH_TYPE) == EthType.IPv4 
+				|| match.get(MatchField.ETH_TYPE) == EthType.ARP)  {
+			PhysicalIPAddress srcIP = null;
+			PhysicalIPAddress dstIP = null;
+			
+			if (match.get(MatchField.ETH_TYPE) == EthType.IPv4) {
+				srcIP = new PhysicalIPAddress(match.get(MatchField.IPV4_SRC).toString());
+				dstIP = new PhysicalIPAddress(match.get(MatchField.IPV4_DST).toString());
+			} else if (match.get(MatchField.ETH_TYPE) == EthType.ARP) {
+				srcIP = new PhysicalIPAddress(match.get(MatchField.ARP_SPA).toString());
+				dstIP = new PhysicalIPAddress(match.get(MatchField.ARP_TPA).toString());
+			}
+
 			Ethernet eth = new Ethernet();
-			eth.deserialize(this.getPacketData(), 0, this.getPacketData().length);
+			eth.deserialize(this.pi.getData(), 0, this.pi.getData().length);
 
 			OVXLinkUtils lUtils = new OVXLinkUtils(eth.getSourceMAC(), eth.getDestinationMAC());
-			//rewrite the OFMatch with the values of the link
+			//rewrite the Match with the values of the link
 			if (lUtils.isValid()) {
 				OVXPort srcPort = port.getOVXPort(lUtils.getTenantId(), lUtils.getLinkId());
 				if (srcPort == null) {
 					this.log.error("Virtual Src Port Unknown: {}, port {} with this match {}; dropping packet", 
-							sw.getName(), match.getInputPort(), match);
+							sw.getName(), port.getPortNumber(), match);
 					return;
 				}
 				this.setInPort(srcPort.getPortNumber());
+				
 				OVXLink link;
 				try {
-					OVXPort dstPort = map.getVirtualNetwork(lUtils.getTenantId()).getNeighborPort(srcPort);
-					link = map.getVirtualSwitch(sw, lUtils.getTenantId()).getMap().
-							getVirtualNetwork(lUtils.getTenantId()).getLink(dstPort, srcPort);
+					OVXPort dstPort = map.getVirtualNetwork(lUtils.getTenantId())
+							.getNeighborPort(srcPort);
+					
+					link = map.getVirtualSwitch(sw, lUtils.getTenantId())
+							.getMap()
+							.getVirtualNetwork(lUtils.getTenantId())
+							.getLink(dstPort, srcPort);
+					
 				} catch (SwitchMappingException | NetworkMappingException e) {
 					return; //same as (link == null)
 				}
+				
 				this.ovxPort = this.port.getOVXPort(lUtils.getTenantId(), link.getLinkId());
+				
 				OVXLinkField linkField = OpenVirteXController.getInstance().getOvxLinkField();
 				//TODO: Need to check that the values in linkId and flowId don't exceed their space
 				if (linkField == OVXLinkField.MAC_ADDRESS) {
 					try {    
 						LinkedList<MACAddress> macList = sw.getMap()
 								.getVirtualNetwork(this.ovxPort.getTenantId())
-								.getFlowManager().getFlowValues(lUtils.getFlowId());
+								.getFlowManager()
+								.getFlowValues(lUtils.getFlowId());
+						
 						eth.setSourceMACAddress(macList.get(0).toBytes())
 						.setDestinationMACAddress(macList.get(1).toBytes());
-						match.setDataLayerSource(eth.getSourceMACAddress())
-						.setDataLayerDestination(eth.getDestinationMACAddress());
+						
+						match = match.createBuilder()
+								.setExact(MatchField.ETH_SRC, 
+										MacAddress.of(eth.getSourceMACAddress()))
+								.setExact(MatchField.ETH_DST, 
+										MacAddress.of(eth.getDestinationMACAddress()))
+								.build();
 					} catch (NetworkMappingException e) {
 						log.warn(e);    
 					}
@@ -151,48 +179,51 @@ public class OVXPacketIn extends OFPacketIn implements Virtualizable {
 					log.warn("VLAN virtual links not yet implemented.");
 					return;
 				}
+			}
 
-			}   
-			
-			if (match.getDataLayerType() == Ethernet.TYPE_ARP) {
+			if (match.get(MatchField.ETH_TYPE) == EthType.ARP) {
 				// ARP packet
 				final ARP arp = (ARP) eth.getPayload();
 				this.tenantId = this.fetchTenantId(match, map, true);
 				try {
 					if (map.hasVirtualIP(srcIP)) {
-						arp.setSenderProtocolAddress(map.getVirtualIP(srcIP)
-								.getIp());
+						arp.setSenderProtocolAddress(map.getVirtualIP(srcIP).getIp());
 					}
 					if (map.hasVirtualIP(dstIP)) {
-						arp.setTargetProtocolAddress(map.getVirtualIP(dstIP)
-								.getIp());
+						arp.setTargetProtocolAddress(map.getVirtualIP(dstIP).getIp());
 					}
 				} catch (AddressMappingException e) {
 					log.warn("Inconsistency in OVXMap? : {}", e);   
 				}
-			} else if (match.getDataLayerType() == Ethernet.TYPE_IPv4) {
+			} else if (match.get(MatchField.ETH_TYPE) == EthType.IPv4) {
 				try {
 					final IPv4 ip = (IPv4) eth.getPayload();
-					ip.setDestinationAddress(map.getVirtualIP(dstIP).getIp());
-					ip.setSourceAddress(map.getVirtualIP(srcIP).getIp());
+					if (map.hasVirtualIP(dstIP)) 
+						ip.setDestinationAddress(map.getVirtualIP(dstIP).getIp());
+					if (map.hasVirtualIP(srcIP)) 
+						ip.setSourceAddress(map.getVirtualIP(srcIP).getIp());
+					
 					// TODO: Incorporate below into fetchTenantId
 					if (this.tenantId == null)
 						this.tenantId = dstIP.getTenantId();
 				} catch (AddressMappingException e) {
-					log.warn("Could not rewrite IP fields : {}", e);   
+					log.warn("Could not rewrite IP fields : {}", e);
 				}
 			} else {
-				this.log.info("{} handling not yet implemented; dropping",
-						match.getDataLayerType());
+				this.log.info("{} handling not yet implemented; dropping", 
+							  match.get(MatchField.ETH_TYPE).toString());
 				this.installDropRule(sw, match);
 				return;
 			}
-			this.setPacketData(eth.serialize());
+			
+			this.pi = this.pi.createBuilder()
+					.setData(eth.serialize())
+					.build();
 			
 			vSwitch = this.fetchOVXSwitch(sw, vSwitch, map);
 			
 			this.sendPkt(vSwitch, match, sw);
-			this.log.debug("IPv4 PacketIn {} sent to virtual network {}", this,
+			this.log.debug("IPv4 or ARP PacketIn {} sent to virtual network {}", this.pi,
 					this.tenantId);
 			return;
 		}
@@ -202,22 +233,29 @@ public class OVXPacketIn extends OFPacketIn implements Virtualizable {
 			this.log.warn(
 					"PacketIn {} does not belong to any virtual network; "
 							+ "dropping and installing a temporary drop rule",
-							this);
+							this.pi);
 			this.installDropRule(sw, match);
 			return;
 		}
 		vSwitch = this.fetchOVXSwitch(sw, vSwitch, map);
 		this.sendPkt(vSwitch, match, sw);
-		this.log.debug("Layer2 PacketIn {} sent to virtual network {}", this,
+		this.log.debug("Layer2 PacketIn {} sent to virtual network {}", this.pi,
 				this.tenantId);
 	}
 
-	private void learnHostIP(OFMatch match, Mappable map)  {
-		if (!match.getWildcardObj().isWildcarded(Flag.NW_SRC)) {
-			
+	private void learnHostIP(Match match, Mappable map)  {
+		int ip_addr = 0;
+		if (match.isExact(MatchField.IPV4_SRC)) {	
+			ip_addr = match.get(MatchField.IPV4_SRC).getInt();
+		} else if (match.isExact(MatchField.ARP_SPA)) {
+			ip_addr = match.get(MatchField.ARP_SPA).getInt();
+		}
+
+		if (ip_addr != 0) {
 			try {
 				map.getVirtualNetwork(tenantId)
-						.getHost(ovxPort).setIPAddress(match.getNetworkSource());;
+				.getHost(ovxPort)
+				.setIPAddress(ip_addr);
 			} catch (NetworkMappingException e) {
 				log.warn("Failed to lookup virtual network {}", this.tenantId);
 				return;
@@ -227,10 +265,9 @@ public class OVXPacketIn extends OFPacketIn implements Virtualizable {
 						this.ovxPort.getPhysicalPortNumber());
 			}
 		}
-		
 	}
 
-	private void sendPkt(final OVXSwitch vSwitch, final OFMatch match,
+	private void sendPkt(final OVXSwitch vSwitch, final Match match,
 			final PhysicalSwitch sw) {
 		if (vSwitch == null || !vSwitch.isActive()) {
 			this.log.warn(
@@ -239,47 +276,57 @@ public class OVXPacketIn extends OFPacketIn implements Virtualizable {
 			this.installDropRule(sw, match);
 			return;
 		}
-		this.setBufferId(vSwitch.addToBufferMap(this));
+		this.pi = this.pi.createBuilder()
+				.setBufferId(OFBufferId.of(vSwitch.addToBufferMap(this)))
+				.build();
+		
 		if (this.port != null && this.ovxPort != null && this.ovxPort.isActive()) {
 			this.setInPort(this.ovxPort.getPortNumber());
-			if ((this.packetData != null) && 
+			if ((this.pi.getData() != null) && 
 					(vSwitch.getMissSendLen() != OVXSetConfig.MSL_FULL)) {
-				this.packetData = Arrays.copyOf(this.packetData, U16.f(vSwitch.getMissSendLen()));
-				this.setLengthU(OFPacketIn.MINIMUM_LENGTH + this.packetData.length);
+				this.pi = this.pi.createBuilder()
+						.setTotalLen(this.pi.getData().length)
+						.setData(Arrays.copyOf(this.pi.getData(), vSwitch.getMissSendLen()))
+						.build();
+				//this.setLengthU(OFPacketIn.MINIMUM_LENGTH + this.packetData.length);
 			}
-			vSwitch.sendMsg(this, sw);
-		}
-		else if (this.port == null) {
-			log.error("The port {} doesn't belong to the physical switch {}", this.getInPort(), sw.getName());
-		}
-		else if (this.ovxPort == null || !this.ovxPort.isActive()) {
+			vSwitch.sendMsg(this.pi, sw);
+		} else if (this.port == null) {
+			log.error("The port {} doesn't belong to the physical switch {}", 
+					this.pi.getInPort(), sw.getName());
+		} else if (this.ovxPort == null || !this.ovxPort.isActive()) {
 			log.error("Virtual port associated to physical port {} in physical switch {} for "
 					+ "virtual network {} is not defined or inactive", 
-					this.getInPort(), sw.getName(), this.tenantId);
+					this.pi.getInPort(), sw.getName(), this.tenantId);
 		} 
 	}
 
-	private void learnAddresses(final OFMatch match, final Mappable map) {
-		if (match.getDataLayerType() == Ethernet.TYPE_IPv4
-				|| match.getDataLayerType() == Ethernet.TYPE_ARP) { 
-			if (!match.getWildcardObj().isWildcarded(Flag.NW_SRC)) 
-				IPMapper.getPhysicalIp(this.tenantId, match.getNetworkSource());
-			if (!match.getWildcardObj().isWildcarded(Flag.NW_DST))
-				IPMapper.getPhysicalIp(this.tenantId, match.getNetworkDestination());
+	private void learnAddresses(final Match match, final Mappable map) {
+		if (match.get(MatchField.ETH_TYPE) == EthType.IPv4) {
+			if (match.isExact(MatchField.IPV4_SRC))
+				IPMapper.getPhysicalIp(this.tenantId, match.get(MatchField.IPV4_SRC).getInt());
+			if (match.isExact(MatchField.IPV4_DST))
+				IPMapper.getPhysicalIp(this.tenantId, match.get(MatchField.IPV4_DST).getInt());
+		} else if (match.get(MatchField.ETH_TYPE) == EthType.ARP) {
+			if (match.isExact(MatchField.ARP_SPA))
+				IPMapper.getPhysicalIp(this.tenantId, match.get(MatchField.ARP_SPA).getInt());
+			if (match.isExact(MatchField.ARP_TPA))
+				IPMapper.getPhysicalIp(this.tenantId, match.get(MatchField.ARP_TPA).getInt());
 		}
 	}
 
-	private void installDropRule(final PhysicalSwitch sw, final OFMatch match) {
-		final OVXFlowMod fm = new OVXFlowMod();
-		fm.setMatch(match);
-		fm.setBufferId(this.getBufferId());
-		fm.setHardTimeout((short) 1);
-		sw.sendMsg(fm, sw);
+	private void installDropRule(final PhysicalSwitch sw, final Match match) {
+		final OVXFlowMod fm = new OVXFlowMod(match.getVersion());
+		
+		fm.setMatch(match)
+		.setBufferId(this.getBufferId())
+		.setHardTimeout(1);
+		
+		sw.sendMsg(fm.getFlow(), sw);
 	}
 
-	private Integer fetchTenantId(final OFMatch match, final Mappable map,
-			final boolean useMAC) {
-		MACAddress mac = MACAddress.valueOf(match.getDataLayerSource());
+	private Integer fetchTenantId(final Match match, final Mappable map, final boolean useMAC) {
+		MACAddress mac =  MACAddress.valueOf(match.get(MatchField.ETH_SRC).getBytes());
 		if (useMAC && map.hasMAC(mac)) {
 			try {
 				return map.getMAC(mac);
@@ -302,30 +349,89 @@ public class OVXPacketIn extends OFPacketIn implements Virtualizable {
 	}
 
 	public OVXPacketIn(final OVXPacketIn pktIn) {
-		this.bufferId = pktIn.bufferId;
-		this.inPort = pktIn.inPort;
-		this.length = pktIn.length;
-		this.packetData = pktIn.packetData;
-		this.reason = pktIn.reason;
-		this.totalLength = pktIn.totalLength;
-		this.type = pktIn.type;
-		this.version = pktIn.version;
-		this.xid = pktIn.xid;
+		this.pi = OFFactories.getFactory(pktIn.getPacket().getVersion())
+				.buildPacketIn()
+				.setBufferId(pktIn.getBufferId())
+				.setInPort(pktIn.getInPort())
+				.setTotalLen(pktIn.getTotalLen())
+				.setData(pktIn.getData())
+				.setReason(pktIn.getReason())
+				.setXid(pktIn.getXid())
+				.build();
+	}	
+
+	public OVXPacketIn(OFMessage m) {
+		this.pi = (OFPacketIn) m;
 	}
 
-	public OVXPacketIn() {
-		super();
+	public OVXPacketIn (final byte[] data, final int portNumber, OFVersion ofversion) {
+		this.pi = OFFactories.getFactory(ofversion)
+				.buildPacketIn()
+				.setInPort(OFPort.of(portNumber))
+				.setBufferId(OFBufferId.NO_BUFFER)
+				.setReason(OFPacketInReason.NO_MATCH)
+				.setData(data)
+				.setTotalLen(data.length)
+				.build();
+	}
+	
+	public OVXPacketIn(OFVersion ofversion) {
+		this.pi = OFFactories.getFactory(ofversion)
+				.buildPacketIn()
+				.setBufferId(OFBufferId.NO_BUFFER)
+				.setReason(OFPacketInReason.NO_MATCH)
+				.build();
+	}
+	     
+	private long getXid() {
+		return this.pi.getXid();
+	}
+	
+	private int getTotalLen() {
+		return this.pi.getTotalLen();
 	}
 
-	public OVXPacketIn (final byte[] data, final short portNumber) {
-		this();
-		this.setInPort(portNumber);
-		this.setBufferId(OFPacketOut.BUFFER_ID_NONE);
-		this.setReason(OFPacketIn.OFPacketInReason.NO_MATCH);
-		this.setPacketData(data);
-		this.setTotalLength((short) (OFPacketIn.MINIMUM_LENGTH + this
-				.getPacketData().length));
-		this.setLengthU(OFPacketIn.MINIMUM_LENGTH + this.getPacketData().length);
+	public byte[] getData() {
+		return this.pi.getData();
 	}
 
+	public OFBufferId getBufferId() {
+		return this.pi.getBufferId();
+	}
+	
+	public OFPacketInReason getReason() {
+		return this.pi.getReason();
+	}
+
+	public OFPort getInPort() {
+		return this.pi.getInPort();
+	}
+
+	public OFPacketIn getPacket() {
+		return this.pi;
+	}
+	
+	public void setInPort(Integer portNumber) {
+		this.pi = this.pi.createBuilder()
+				.setInPort(OFPort.of((portNumber)))
+				.build();
+	}
+
+	public void setBufferId(OFBufferId bufferId) {
+		this.pi = this.pi.createBuilder()
+				.setBufferId(bufferId)
+				.build();
+	}
+
+	public void setReason(OFPacketInReason reason) {
+		this.pi = this.pi.createBuilder()
+				.setReason(reason)
+				.build();
+	} 
+	
+	public void setData(byte[] data) {
+		this.pi = this.pi.createBuilder()
+				.setData(data)
+				.build();
+	}
 }

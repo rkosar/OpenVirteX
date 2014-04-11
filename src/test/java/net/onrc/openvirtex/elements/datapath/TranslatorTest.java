@@ -14,12 +14,16 @@ import junit.framework.TestSuite;
 import net.onrc.openvirtex.core.OpenVirteXController;
 import net.onrc.openvirtex.core.cmd.CmdLineSettings;
 
-import org.openflow.protocol.OFHello;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFHello;
+import org.projectfloodlight.openflow.protocol.OFVersion;
 
 public class TranslatorTest extends TestCase {
 
 	OpenVirteXController ctl = null;
 	private XidTranslator<OVXSwitch> translator;
+	
+	private final OFVersion ofversion = OFVersion.OF_10;
 
 	public TranslatorTest(final String name) {
 		super(name);
@@ -30,21 +34,26 @@ public class TranslatorTest extends TestCase {
 	}
 
 	public void testTranslate() {
-		final OVXSwitch vsw = new OVXSingleSwitch(1, 1);
+		final OVXSwitch vsw = new OVXSingleSwitch(1, 1, this.ofversion);
 
 		// make a south-bound message....something simple.
-		final OFHello ofh = new OFHello();
-		ofh.setXid(0);
+		final OFHello ofh = OFFactories.getFactory(this.ofversion)
+									   .buildHello()
+									   .setXid(0)
+									   .build();
 
-		final int newXid = this.translator.translate(ofh.getXid(), vsw);
+		final long newXid = this.translator.translate(ofh.getXid(), vsw);
 		Assert.assertEquals(newXid, XidTranslator.MIN_XID);
 	}
 
 	public void testUntranslate() {
-		final OVXSwitch vsw = new OVXSingleSwitch(1, 1);
+		final OVXSwitch vsw = new OVXSingleSwitch(1, 1, this.ofversion);
 
-		final OFHello ofh = new OFHello();
-		ofh.setXid(0);
+		final OFHello ofh = OFFactories.getFactory(this.ofversion)
+				   .buildHello()
+				   .setXid(0)
+				   .build();
+
 		this.translator.translate(ofh.getXid(), vsw);
 
 		final XidPair<OVXSwitch> pair = this.translator.untranslate(XidTranslator.MIN_XID);

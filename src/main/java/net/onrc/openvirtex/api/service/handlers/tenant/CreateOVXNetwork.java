@@ -24,6 +24,7 @@ import net.onrc.openvirtex.exceptions.MissingRequiredField;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.projectfloodlight.openflow.protocol.OFVersion;
 
 import com.thetransactioncompany.jsonrpc2.JSONRPC2Error;
 import com.thetransactioncompany.jsonrpc2.JSONRPC2ParamsType;
@@ -45,6 +46,8 @@ public class CreateOVXNetwork extends ApiHandler<Map<String, Object>> {
 					TenantHandler.NETADD, params, true, null);
 			final Number netMask = HandlerUtils.<Number> fetchField(
 					TenantHandler.NETMASK, params, true, null);
+			final OFVersion ofversion = HandlerUtils.<OFVersion> fetchField(
+					TenantHandler.OF_VERSION, params, false, OFVersion.OF_10);
 
 			for (String ctrl : ctrlUrls) {
 				String[] ctrlParts = ctrl.split(":");
@@ -53,7 +56,8 @@ public class CreateOVXNetwork extends ApiHandler<Map<String, Object>> {
 				.isControllerAvailable(ctrlParts[1], Integer.parseInt(ctrlParts[2]), -1);
 			}
 			final IPAddress addr = new OVXIPAddress(netAddress, -1);
-			final OVXNetwork virtualNetwork = new OVXNetwork(ctrlUrls, addr, netMask.shortValue());
+			final OVXNetwork virtualNetwork = new OVXNetwork(ctrlUrls, addr, netMask.shortValue(), ofversion);
+			
 			virtualNetwork.register();
 			this.log.info("Created virtual network {}",
 					virtualNetwork.getTenantId());

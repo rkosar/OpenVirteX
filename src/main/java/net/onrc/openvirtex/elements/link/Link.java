@@ -95,8 +95,8 @@ public abstract class Link<T1 extends Port, T2 extends Switch> implements Persis
 				.toString();
 		final String dstSwitch = this.getDstSwitch().getSwitchName()
 				.toString();
-		final short srcPort = this.srcPort.getPortNumber();
-		final short dstPort = this.dstPort.getPortNumber();
+		final int srcPort = this.srcPort.getPortNumber();
+		final int dstPort = this.dstPort.getPortNumber();
 		return srcSwitch + "/" + srcPort + "-" + dstSwitch + "/" + dstPort;
 	}
 

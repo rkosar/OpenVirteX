@@ -9,7 +9,6 @@
 package net.onrc.openvirtex.elements.link;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -24,7 +23,6 @@ import net.onrc.openvirtex.db.DBManager;
 import net.onrc.openvirtex.elements.Mappable;
 import net.onrc.openvirtex.elements.OVXMap;
 import net.onrc.openvirtex.elements.address.IPMapper;
-import net.onrc.openvirtex.elements.datapath.OVXFlowTable;
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 import net.onrc.openvirtex.elements.port.OVXPort;
 import net.onrc.openvirtex.elements.port.PhysicalPort;
@@ -33,19 +31,23 @@ import net.onrc.openvirtex.exceptions.LinkMappingException;
 import net.onrc.openvirtex.exceptions.NetworkMappingException;
 import net.onrc.openvirtex.exceptions.PortMappingException;
 import net.onrc.openvirtex.messages.OVXFlowMod;
-import net.onrc.openvirtex.messages.OVXPacketOut;
-import net.onrc.openvirtex.messages.actions.OVXActionOutput;
-import net.onrc.openvirtex.packet.Ethernet;
 import net.onrc.openvirtex.routing.RoutingAlgorithms;
 import net.onrc.openvirtex.routing.RoutingAlgorithms.RoutingType;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.OFFlowMod;
-import org.openflow.protocol.action.OFAction;
-import org.openflow.protocol.action.OFActionOutput;
-import org.openflow.protocol.action.OFActionType;
-import org.openflow.util.U8;
+import org.projectfloodlight.openflow.protocol.OFActionType;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFFlowModCommand;
+import org.projectfloodlight.openflow.protocol.action.OFAction;
+import org.projectfloodlight.openflow.protocol.action.OFActionOutput;
+import org.projectfloodlight.openflow.protocol.match.Match;
+import org.projectfloodlight.openflow.protocol.match.MatchField;
+import org.projectfloodlight.openflow.types.EthType;
+import org.projectfloodlight.openflow.types.OFBufferId;
+import org.projectfloodlight.openflow.types.OFPort;
+import org.projectfloodlight.openflow.types.U64;
+import org.projectfloodlight.openflow.types.U8;
 
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
@@ -222,15 +224,12 @@ public class OVXLink extends Link<OVXPort, OVXSwitch> {
 		for (OVXFlowMod fe : flows) {
 			for(OFAction act : fe.getActions()) {
 				if (act.getType() == OFActionType.OUTPUT) {
-					if (((OFActionOutput) act).getPort() == this.getSrcPort().getPortNumber()) {
+					if (((OFActionOutput) act).getPort().getPortNumber() == this.getSrcPort().getPortNumber() ) {
 						try {
 							Integer flowId = this.map.getVirtualNetwork(this.tenantId).getFlowManager()
-									.storeFlowValues(fe.getMatch().getDataLayerSource(),
-											fe.getMatch().getDataLayerDestination());
-							
-							OVXFlowMod fm = fe.clone();
-							fm.setCookie(((OVXFlowTable) this.getSrcPort().getParentSwitch().getFlowTable()).getCookie(fe, true));
-							this.generateLinkFMs(fm, flowId);
+									.storeFlowValues(fe.getMatch().get(MatchField.ETH_SRC).getBytes(),
+													 fe.getMatch().get(MatchField.ETH_DST).getBytes());
+							this.generateLinkFMs(fe.clone(), flowId);
 						} catch (IndexOutOfBoundException e) {
 							log.error("Too many host to generate the flow pairs in this virtual network {}. "
 									+ "Dropping flow-mod {} ", this.getTenantId(), fe);
@@ -301,23 +300,25 @@ public class OVXLink extends Link<OVXPort, OVXSwitch> {
 		 * 1) change the fields where the virtual link info are stored
 		 * 2) change the fields where the physical ips are stored
 		 */
-		final OVXLinkUtils lUtils = new OVXLinkUtils(this.tenantId,
-				this.linkId, flowId);
-		lUtils.rewriteMatch(fm.getMatch());
+		fm.setPhysicalCookie();
+		final OVXLinkUtils lUtils = new OVXLinkUtils(this.tenantId, this.linkId, flowId);
+		
+		Match fmmatch = fm.getMatch();
+		
+		lUtils.rewriteMatch(fmmatch);
 		long cookie = tenantId;
-		fm.setCookie(cookie << 32);
+		fm.setCookie(U64.of(cookie << 32));
 
-		if (fm.getMatch().getDataLayerType() == Ethernet.TYPE_IPv4)
-			IPMapper.rewriteMatch(this.tenantId, fm.getMatch());
+		if (fmmatch.get(MatchField.ETH_TYPE) == EthType.IPv4 || fmmatch.get(MatchField.ETH_TYPE) == EthType.ARP)
+			IPMapper.rewriteMatch(this.tenantId, fmmatch);
 
 		/*
 		 * Get the list of physical links mapped to this virtual link,
 		 * in REVERSE ORDER
 		 */
-		PhysicalPort inPort = null;
 		PhysicalPort outPort = null;
-		fm.setBufferId(OVXPacketOut.BUFFER_ID_NONE);
-		fm.setCommand(OFFlowMod.OFPFC_MODIFY);
+		fm.setBufferId(OFBufferId.NO_BUFFER);
+		fm.setCommand(OFFlowModCommand.MODIFY);
 		List<PhysicalLink> plinks = new LinkedList<PhysicalLink>();
 		try {
 			final OVXLink link = this.map.getVirtualNetwork(this.tenantId)
@@ -334,14 +335,25 @@ public class OVXLink extends Link<OVXPort, OVXSwitch> {
 
 		for (final PhysicalLink phyLink : plinks) {
 			if (outPort != null) {
-				inPort = phyLink.getSrcPort();
-				fm.getMatch().setInputPort(inPort.getPortNumber());
-				fm.setLengthU(OVXFlowMod.MINIMUM_LENGTH
-						+ OVXActionOutput.MINIMUM_LENGTH);
-				fm.setActions(Arrays.asList((OFAction) new OFActionOutput(
-						outPort.getPortNumber(), (short) 0xffff)));
-				phyLink.getSrcPort().getParentSwitch()
-				.sendMsg(fm, phyLink.getSrcPort().getParentSwitch());
+				//inPort = ;
+				
+				fmmatch = fmmatch.createBuilder().setExact(MatchField.IN_PORT, OFPort.of(phyLink.getSrcPort().getPortNumber())).build();
+	
+				final List<OFAction> actions = new LinkedList<OFAction>();
+				OFActionOutput.Builder ab = OFFactories.getFactory(fm.getVersion()).actions().buildOutput();
+				ab.setPort(OFPort.of(0xffff));
+				actions.add(ab.build());
+						
+				fm.setMatch(fmmatch);
+				fm.setActions(actions);
+				//fm.setLengthU(OVXFlowMod.MINIMUM_LENGTH
+				//		+ OVXActionOutput.MINIMUM_LENGTH);
+				//fm.setActions(Arrays.asList((OFAction) new OFActionOutput(
+				//		outPort.getPortNumber(), (short) 0xffff)));
+				phyLink.getSrcPort()
+					   .getParentSwitch()
+					   .sendMsg(fm.getFlow(), phyLink.getSrcPort().getParentSwitch());
+				
 				this.log.debug(
 						"Sending virtual link intermediate fm to sw {}: {}",
 						phyLink.getSrcPort().getParentSwitch().getSwitchName(), fm);

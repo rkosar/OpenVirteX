@@ -14,53 +14,63 @@ import net.onrc.openvirtex.elements.datapath.XidPair;
 import net.onrc.openvirtex.elements.port.OVXPort;
 import net.onrc.openvirtex.exceptions.SwitchMappingException;
 
-import org.openflow.protocol.OFError.OFBadActionCode;
-import org.openflow.protocol.OFError.OFBadRequestCode;
-import org.openflow.protocol.OFError.OFErrorType;
-import org.openflow.protocol.OFError.OFFlowModFailedCode;
-import org.openflow.protocol.OFError.OFPortModFailedCode;
-import org.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFErrorMsg;
+import org.projectfloodlight.openflow.protocol.OFBadActionCode;
+import org.projectfloodlight.openflow.protocol.OFBadRequestCode;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFFlowModFailedCode;
+import org.projectfloodlight.openflow.protocol.OFPortModFailedCode;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+
 
 public class OVXMessageUtil {
 
-	public static OFMessage makeError(final OFBadActionCode code,
+	public static OFMessage makeErrorMsg(final OFBadActionCode code,
 			final OFMessage msg) {
-		final OVXError err = new OVXError();
-		err.setErrorType(OFErrorType.OFPET_BAD_REQUEST);
-		err.setErrorCode(code);
-		err.setOffendingMsg(msg);
-		err.setXid(msg.getXid());
-		return err;
+		OFErrorMsg em = OFFactories.getFactory(msg.getVersion())
+				.errorMsgs()
+				.buildBadActionErrorMsg()
+				.setCode(code)
+				.setXid(msg.getXid())
+				.build();
+		
+		return em;
 	}
 
 	public static OFMessage makeErrorMsg(final OFFlowModFailedCode code,
 			final OFMessage msg) {
-		final OVXError err = new OVXError();
-		err.setErrorType(OFErrorType.OFPET_FLOW_MOD_FAILED);
-		err.setErrorCode(code);
-		err.setOffendingMsg(msg);
-		err.setXid(msg.getXid());
-		return err;
+		OFErrorMsg em = OFFactories.getFactory(msg.getVersion())
+				.errorMsgs()
+				.buildFlowModFailedErrorMsg()
+				.setCode(code)
+				.setXid(msg.getXid())
+				.build();
+		
+		return em;
 	}
 
 	public static OFMessage makeErrorMsg(final OFPortModFailedCode code,
 			final OFMessage msg) {
-		final OVXError err = new OVXError();
-		err.setErrorType(OFErrorType.OFPET_PORT_MOD_FAILED);
-		err.setErrorCode(code);
-		err.setOffendingMsg(msg);
-		err.setXid(msg.getXid());
-		return err;
+		OFErrorMsg em = OFFactories.getFactory(msg.getVersion())
+				.errorMsgs()
+				.buildPortModFailedErrorMsg()
+				.setCode(code)
+				.setXid(msg.getXid())
+				.build();
+		
+		return em;
 	}
 
 	public static OFMessage makeErrorMsg(final OFBadRequestCode code,
 			final OFMessage msg) {
-		final OVXError err = new OVXError();
-		err.setErrorType(OFErrorType.OFPET_BAD_REQUEST);
-		err.setErrorCode(code);
-		err.setOffendingMsg(msg);
-		err.setXid(msg.getXid());
-		return err;
+		OFErrorMsg em = OFFactories.getFactory(msg.getVersion())
+				.errorMsgs()
+				.buildBadRequestErrorMsg()
+				.setCode(code)
+				.setXid(msg.getXid())
+				.build();
+		
+		return em;
 	}
 
 	/**
@@ -71,11 +81,15 @@ public class OVXMessageUtil {
 	 * @param inPort
 	 * @return
 	 */
-	public static OVXSwitch translateXid(final OFMessage msg,
+	public static OVXSwitch translateXid(OFMessage msg,
 			final OVXPort inPort) {
 		final OVXSwitch vsw = inPort.getParentSwitch();
-		final int xid = vsw.translate(msg, inPort);
-		msg.setXid(xid);
+		final long xid = vsw.translate(msg, inPort);
+		
+		msg = msg.createBuilder()
+				.setXid(xid)
+				.build();
+		
 		return vsw;
 	}
 
@@ -87,10 +101,14 @@ public class OVXMessageUtil {
 	 * @param vsw
 	 * @return new Xid for msg
 	 */
-	public static Integer translateXid(final OFMessage msg, final OVXSwitch vsw) {
+	public static Long translateXid(OFMessage msg, final OVXSwitch vsw) {
 		// this returns the original XID for a BigSwitch
-		final Integer xid = vsw.translate(msg, null);
-		msg.setXid(xid);
+		final Long xid = vsw.translate(msg, null);
+		
+		msg = msg.createBuilder()
+				.setXid(xid)
+				.build();
+		
 		return xid;
 	}
 
@@ -101,7 +119,7 @@ public class OVXMessageUtil {
 	 * @param msg
 	 * @param inPort
 	 */
-	public static void translateXidAndSend(final OFMessage msg,
+	public static void translateXidAndSend(OFMessage msg,
 			final OVXPort inPort) {
 		final OVXSwitch vsw = OVXMessageUtil.translateXid(msg, inPort);
 		vsw.sendSouth(msg, inPort);
@@ -114,34 +132,42 @@ public class OVXMessageUtil {
 	 * @param msg
 	 * @param inPort
 	 */
-	public static void translateXidAndSend(final OFMessage msg,
+	public static void translateXidAndSend(OFMessage msg,
 			final OVXSwitch vsw) {
-		final int newXid = OVXMessageUtil.translateXid(msg, vsw);
-
+		
+		final long newXid = OVXMessageUtil.translateXid(msg, vsw);
 		if (vsw instanceof OVXBigSwitch) {
 			// no port info for BigSwitch, to all its PhysicalSwitches. Is this ok?
 			try {
 				for (final PhysicalSwitch psw : vsw.getMap().getPhysicalSwitches(vsw)) {
-					final int xid = psw.translate(msg, vsw);
-					msg.setXid(xid);
+					final long xid = psw.translate(msg, vsw);
+					msg = msg.createBuilder()
+							.setXid(xid)
+							.build();
+					
 					psw.sendMsg(msg, vsw);
-					msg.setXid(newXid);
+					msg = msg.createBuilder()
+							.setXid(newXid)
+							.build();
 				}
-                        } catch (SwitchMappingException e) {
-				//log warning                     
-                        }
+			} catch (SwitchMappingException e) {
+				//log warning
+			}
 		} else {
 			vsw.sendSouth(msg, null);
 		}
 	}
 
-	public static OVXSwitch untranslateXid(final OFMessage msg,
+	public static OVXSwitch untranslateXid(OFMessage msg,
 			final PhysicalSwitch psw) {
 		final XidPair<OVXSwitch> pair = psw.untranslate(msg);
 		if (pair == null) {
 			return null;
 		}
-		msg.setXid(pair.getXid());
+		msg = msg.createBuilder()
+				.setXid(pair.getXid())
+				.build();
+
 		return pair.getSwitch();
 	}
 
@@ -161,5 +187,4 @@ public class OVXMessageUtil {
 		}
 		vsw.sendMsg(msg, psw);
 	}
-
 }

@@ -9,28 +9,28 @@
 
 package net.onrc.openvirtex.messages.statistics;
 
+import org.projectfloodlight.openflow.protocol.OFVersion;
+
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 import net.onrc.openvirtex.elements.datapath.PhysicalSwitch;
 import net.onrc.openvirtex.messages.OVXStatisticsReply;
 import net.onrc.openvirtex.messages.OVXStatisticsRequest;
 
-import org.openflow.protocol.statistics.OFVendorStatistics;
-
-public class OVXVendorStatistics extends OFVendorStatistics implements
-		VirtualizableStatistic, DevirtualizableStatistic {
-
+public class OVXVendorStatistics implements VirtualizableStatistic, DevirtualizableStatistic {
+	
+	public OVXVendorStatistics(OFVersion ofVersion) {
+		// TODO Auto-generated constructor stub
+	}
+	
 	@Override
 	public void devirtualizeStatistic(final OVXSwitch sw,
 			final OVXStatisticsRequest msg) {
 		// TODO Auto-generated method stub
-
 	}
 
 	@Override
 	public void virtualizeStatistic(final PhysicalSwitch sw,
 			final OVXStatisticsReply msg) {
 		// TODO Auto-generated method stub
-
 	}
-
 }

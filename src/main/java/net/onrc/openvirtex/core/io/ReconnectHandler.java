@@ -52,7 +52,6 @@ public class ReconnectHandler extends SimpleChannelHandler {
 		this.timer = timer;
 		this.maxBackOff = maxBackOff;
 		this.cg = cg;
-
 	}
 
 	@Override
@@ -70,7 +69,6 @@ public class ReconnectHandler extends SimpleChannelHandler {
 		this.log.error("Backing off {} for controller {}", backOffTime,
 				this.bootstrap.getOption("remoteAddress"));
 		ctx.sendUpstream(e);
-
 	}
 
 	@Override
@@ -133,8 +131,6 @@ public class ReconnectHandler extends SimpleChannelHandler {
 
 				}
 			});
-
 		}
 	}
-
 }

@@ -11,28 +11,35 @@ package net.onrc.openvirtex.messages;
 
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 import net.onrc.openvirtex.elements.port.OVXPort;
-import net.onrc.openvirtex.elements.port.PhysicalPort;
 
-import org.openflow.protocol.OFError.OFBadRequestCode;
-import org.openflow.protocol.OFPortMod;
+import org.projectfloodlight.openflow.protocol.OFBadRequestCode;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFPortMod;
+import org.projectfloodlight.openflow.types.OFPort;
 
-public class OVXPortMod extends OFPortMod implements Devirtualizable {
-
+public class OVXPortMod  implements Devirtualizable {
+	private OFPortMod pm;
+	
+	
+	public OVXPortMod(OFMessage m) {
+		this.pm = (OFPortMod) m;
+	}
+	
 	@Override
 	public void devirtualize(final OVXSwitch sw) {
 		// TODO Auto-generated method stub
 		// assume port numbers are virtual
-		final OVXPort p = sw.getPort(this.getPortNumber());
+		
+		final OVXPort p = sw.getPort(this.pm.getPortNo().getPortNumber());
 		if (p == null) {
 			sw.sendMsg(OVXMessageUtil.makeErrorMsg(
-					OFBadRequestCode.OFPBRC_EPERM, this), sw);
+					OFBadRequestCode.EPERM, this.pm), sw);
 			return;
 		}
 		// set physical port number - anything else to do?
-		final PhysicalPort phyPort = p.getPhysicalPort();
-		this.setPortNumber(phyPort.getPortNumber());
+		//this.setPortNumber(phyPort.getPortNumber());
+		this.pm = this.pm.createBuilder().setPortNo(OFPort.of(p.getPhysicalPort().getPortNumber())).build();
 
-		OVXMessageUtil.translateXid(this, p);
+		OVXMessageUtil.translateXid(this.pm, p);
 	}
-
 }

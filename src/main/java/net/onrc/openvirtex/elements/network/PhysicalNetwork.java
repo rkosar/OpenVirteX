@@ -26,8 +26,8 @@ import net.onrc.openvirtex.linkdiscovery.SwitchDiscoveryManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jboss.netty.util.HashedWheelTimer;
-import org.openflow.protocol.OFMessage;
-import org.openflow.protocol.OFPort;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.types.OFPort;
 
 /**
  * 
@@ -39,8 +39,7 @@ import org.openflow.protocol.OFPort;
  * TODO: should probably subscribe to PORT UP/DOWN events here
  * 
  */
-public class PhysicalNetwork extends
-Network<PhysicalSwitch, PhysicalPort, PhysicalLink> {
+public class PhysicalNetwork extends Network<PhysicalSwitch, PhysicalPort, PhysicalLink> {
 
 	private static PhysicalNetwork instance;
 	private ArrayList<Uplink> uplinkList;
@@ -118,8 +117,11 @@ Network<PhysicalSwitch, PhysicalPort, PhysicalLink> {
 				= this.discoveryManager.get(port.getParentSwitch().getSwitchId());
 		if (sdm != null) {
 			// Do not run discovery on local OpenFlow port
-			if (port.getPortNumber() != OFPort.OFPP_LOCAL.getValue())
+			if (port.getPortNumber() != OFPort.LOCAL.getPortNumber())
+			{
 				sdm.addPort(port);
+				//log.info("adding port {}", port.getPortNumber());
+			}
 		}		
 		DBManager.getInstance().addPort(port.toDPIDandPort());
 	}
@@ -135,8 +137,11 @@ Network<PhysicalSwitch, PhysicalPort, PhysicalLink> {
 		port.unregister();
 		/* remove from topology discovery */
 		if (sdm != null) {
-			log.info("removing port {}", port.getPortNumber());
-			sdm.removePort(port);
+			if (port.getPortNumber() != OFPort.LOCAL.getPortNumber())
+			{
+				log.info("removing port {}", port.getPortNumber());
+				sdm.removePort(port);
+			}
 		}
 		/* remove from this network's mappings */
 		PhysicalPort dst = this.neighborPortMap.get(port);
@@ -158,9 +163,9 @@ Network<PhysicalSwitch, PhysicalPort, PhysicalLink> {
 			final PhysicalLink link = new PhysicalLink(srcPort, dstPort);
 			OVXMap.getInstance().knownLink(link);
 			super.addLink(link);
-			log.info("Adding physical link between {}/{} and {}/{}", link.getSrcSwitch().getSwitchName(),
-					link.getSrcPort().getPortNumber(), link.getDstSwitch().getSwitchName(),
-					link.getDstPort().getPortNumber());
+			log.info("Adding physical link between {}/{} and {}/{}", 
+					link.getSrcSwitch().getSwitchName(), link.getSrcPort().getPortNumber(), 
+					link.getDstSwitch().getSwitchName(), link.getDstPort().getPortNumber());
 			DPIDandPortPair dpp = new DPIDandPortPair(
 					new DPIDandPort(srcPort.getParentSwitch().getSwitchId(), srcPort.getPortNumber()),
 					new DPIDandPort(dstPort.getParentSwitch().getSwitchId(), dstPort.getPortNumber()));
@@ -186,9 +191,9 @@ Network<PhysicalSwitch, PhysicalPort, PhysicalLink> {
 					new DPIDandPort(dstPort.getParentSwitch().getSwitchId(), dstPort.getPortNumber()));
 			DBManager.getInstance().delLink(dpp);
 			super.removeLink(link);
-			log.info("Removing physical link between {}/{} and {}/{}", link.getSrcSwitch().getSwitchName(),
-					link.getSrcPort().getPortNumber(), link.getDstSwitch().getSwitchName(),
-					link.getDstPort().getPortNumber());
+			log.info("Removing physical link between {}/{} and {}/{}", 
+					link.getSrcSwitch().getSwitchName(), link.getSrcPort().getPortNumber(),
+					link.getDstSwitch().getSwitchName(), link.getDstPort().getPortNumber());
 			super.removeLink(link);
 		} else {
 			PhysicalNetwork.log.debug("Tried to remove invalid link");
@@ -242,5 +247,4 @@ Network<PhysicalSwitch, PhysicalPort, PhysicalLink> {
 	public SwitchDiscoveryManager getDiscoveryManager(long switchDPID) {
 		return this.discoveryManager.get(switchDPID);
 	}
-
 }

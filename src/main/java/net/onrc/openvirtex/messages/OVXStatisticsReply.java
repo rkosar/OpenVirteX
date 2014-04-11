@@ -13,14 +13,18 @@ import net.onrc.openvirtex.messages.statistics.VirtualizableStatistic;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.OFStatisticsReply;
-import org.openflow.protocol.statistics.OFStatisticsType;
+import org.projectfloodlight.openflow.protocol.OFAggregateStatsReply;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFStatsReply;
+import org.projectfloodlight.openflow.protocol.OFStatsType;
 
-public class OVXStatisticsReply extends OFStatisticsReply implements
-		Virtualizable {
-
-	private final Logger log = LogManager.getLogger(OVXStatisticsReply.class
-			.getName());
+public class OVXStatisticsReply implements Virtualizable {
+	private OFStatsReply sr;
+	private final Logger log = LogManager.getLogger(OVXStatisticsReply.class.getName());
+	
+	public OVXStatisticsReply(OFMessage m) {
+		this.sr = (OFStatsReply) m;
+	}
 
 	@Override
 	public void virtualize(final PhysicalSwitch sw) {
@@ -33,18 +37,15 @@ public class OVXStatisticsReply extends OFStatisticsReply implements
 		 * getStatistics to handle them all.
 		 */
 		try {
-			
-			if (this.getStatistics().size() > 0) {
-				VirtualizableStatistic stat = (VirtualizableStatistic) this.getStatistics().get(0);
+			if (this.sr.getStatsType() == OFStatsType.AGGREGATE && ((OFAggregateStatsReply)this.sr).getPacketCount().getValue() > 0 ) 
+			{
+				VirtualizableStatistic stat = (VirtualizableStatistic) this.sr;
 				stat.virtualizeStatistic(sw, this);
-			} else if (this.getStatisticType() == OFStatisticsType.FLOW) {
+			} else if (this.sr.getStatsType() == OFStatsType.FLOW) {
 				sw.setFlowStatistics(null);
 			}
-		    
 		} catch (final ClassCastException e) {
 			this.log.error("Statistic received is not virtualizable {}", this);
 		}
-
 	}
-
 }

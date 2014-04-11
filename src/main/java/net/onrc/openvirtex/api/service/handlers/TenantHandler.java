@@ -64,6 +64,8 @@ public class TenantHandler extends AbstractHandler implements RequestHandler {
 	public static final String HOST = "hostId";
 	public static final String ROUTE = "routeId";
 	public static final String IS_BOOTED = "isBooted";
+	public static final String OF_VERSION = "ofversion";
+	
 
 	@SuppressWarnings({ "serial", "rawtypes" })
 	HashMap<String, ApiHandler> handlers = new HashMap<String, ApiHandler>() {
@@ -128,5 +130,4 @@ public class TenantHandler extends AbstractHandler implements RequestHandler {
 
 		return new JSONRPC2Response(JSONRPC2Error.METHOD_NOT_FOUND, req.getID());
 	}
-
 }

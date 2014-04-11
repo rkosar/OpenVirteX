@@ -15,10 +15,7 @@ import net.onrc.openvirtex.messages.OVXStatisticsRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import org.openflow.protocol.statistics.OFQueueStatisticsRequest;
-
-public class OVXQueueStatisticsRequest extends OFQueueStatisticsRequest
-		implements DevirtualizableStatistic {
+public class OVXQueueStatisticsRequest implements DevirtualizableStatistic {
 
 	Logger log = LogManager.getLogger(OVXQueueStatisticsRequest.class.getName());
 	

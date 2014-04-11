@@ -317,7 +317,7 @@ public class HandlerUtils {
 	 * @throws NetworkMappingException 
 	 */
 	public static void isValidOVXPort(final int tenantId, final long dpid,
-			final short portNumber) throws InvalidPortException, NetworkMappingException {
+			final int portNumber) throws InvalidPortException, NetworkMappingException {
 		final OVXSwitch sw = OVXMap.getInstance().getVirtualNetwork(tenantId).getSwitch(dpid);
 		if (sw == null || sw.getPort(portNumber) == null) {
 			throw new InvalidPortException(
@@ -352,7 +352,7 @@ public class HandlerUtils {
 	 * @throws SwitchMappingException 
 	 */
 	public static void isValidPhysicalPort(final int tenantId, final long dpid,
-			final short portNumber) throws InvalidPortException, InvalidDPIDException, SwitchMappingException {
+			final int portNumber) throws InvalidPortException, InvalidDPIDException, SwitchMappingException {
 		final PhysicalSwitch sw = PhysicalNetwork.getInstance().getSwitch(dpid);
 		if (sw == null || sw.getPort(portNumber) == null) {
 			throw new InvalidPortException(
@@ -402,8 +402,8 @@ public class HandlerUtils {
 	 * @throws NetworkMappingException 
 	 * @throws VirtualLinkException
 	 */
-	public static void areValidLinkEndPoints(final int tenantId, final long srcDpid, final short ovxSrcPort, final long dstDpid,
-			final short ovxDstPort, final List<PhysicalLink> physicalLinks) throws NetworkMappingException {
+	public static void areValidLinkEndPoints(final int tenantId, final long srcDpid, final int ovxSrcPort, final long dstDpid,
+			final int ovxDstPort, final List<PhysicalLink> physicalLinks) throws NetworkMappingException {
 		OVXNetwork net = OVXMap.getInstance().getVirtualNetwork(tenantId);
 		OVXPort srcPort = net.getSwitch(srcDpid).getPort(ovxSrcPort);
 		OVXPort dstPort = net.getSwitch(dstDpid).getPort(ovxDstPort);
@@ -432,10 +432,10 @@ public class HandlerUtils {
 			final long dstDpid = Long.parseLong(dstDpidPort[0]);
 			final PhysicalPort srcPort = PhysicalNetwork.getInstance()
 					.getSwitch(srcDpid)
-					.getPort(Short.valueOf(srcDpidPort[1]));
+					.getPort(Integer.valueOf(srcDpidPort[1]));
 			final PhysicalPort dstPort = PhysicalNetwork.getInstance()
 					.getSwitch(dstDpid)
-					.getPort(Short.valueOf(dstDpidPort[1]));
+					.getPort(Integer.valueOf(dstDpidPort[1]));
 			final PhysicalLink link = PhysicalNetwork.getInstance()
 					.getLink(srcPort, dstPort);
 			if (link == null)

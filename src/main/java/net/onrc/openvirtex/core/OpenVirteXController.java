@@ -40,7 +40,6 @@ import org.jboss.netty.channel.group.DefaultChannelGroup;
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory;
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
-import org.openflow.vendor.nicira.OFNiciraVendorExtensions;
 
 
 public class OpenVirteXController implements Runnable {
@@ -131,7 +130,6 @@ public class OpenVirteXController implements Runnable {
 		} catch (final Exception e) {
 			throw new RuntimeException(e);
 		}
-
 	}
 	
 	public void addControllers(final OVXSwitch sw, final Set<String> ctrls) {
@@ -275,17 +273,18 @@ public class OpenVirteXController implements Runnable {
 		}
 		return tenantIdCounter;
 	}
-	
-	 private void initVendorMessages() {
-	        // Configure openflowj to be able to parse the role request/reply
-	        // vendor messages.
-	        OFNiciraVendorExtensions.initialize();
-
-	        
-	    }
+	 
+	private void initVendorMessages() {
+		 // Configure openflowj to be able to parse the role request/reply
+		 // vendor messages.
+		 
+		 //OFNiciraControllerRoleRequest
+		 //OFNiciraControllerRoleReply
+		 
+		 //OFNiciraVendorExtensions.initialize();
+	 }
 
 	public Boolean getUseBDDP() {
 		return this.useBDDP;
 	}
-
 }

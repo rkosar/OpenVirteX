@@ -7,24 +7,23 @@
  ******************************************************************************/
 package net.onrc.openvirtex.elements.datapath;
 
-import org.openflow.util.LRULinkedHashMap;
-
+import org.projectfloodlight.openflow.util.LRULinkedHashMap;
 /**
  * based on Flowvisor XidTranslator by capveg
  */
 public class XidTranslator<T> {
-
-	static final int MIN_XID = 256;
+	
+	static final long MIN_XID = 256;
 	static final int INIT_SIZE = 1 << 10;
 	static final int MAX_SIZE = 1 << 14; // must be larger than the max lifetime
-											// of an XID * rate of
-											// mesgs/sec
-	int nextID;
-	LRULinkedHashMap<Integer, XidPair<T>> xidMap;
+									     // of an XID * rate of
+										 // mesgs/sec
+	long nextID;
+	LRULinkedHashMap<Long, XidPair<T>> xidMap;
 
 	public XidTranslator() {
 		this.nextID = XidTranslator.MIN_XID;
-		this.xidMap = new LRULinkedHashMap<Integer, XidPair<T>>(
+		this.xidMap = new LRULinkedHashMap<Long, XidPair<T>>(
 				XidTranslator.INIT_SIZE, XidTranslator.MAX_SIZE);
 	}
 
@@ -34,20 +33,21 @@ public class XidTranslator<T> {
 	 * @param xid
 	 * @return
 	 */
-	public XidPair<T> untranslate(final int xid) {
-		return this.xidMap.get(Integer.valueOf(xid));
+	public XidPair<T> untranslate(final long xid) {
+		return this.xidMap.get(xid);
 	}
 
 	/**
 	 * @return the new Xid for the message.
 	 */
-	public int translate(final int xid, final T sw) {
-		final int ret = this.nextID++;
+	public long translate(final long xid, final T sw) {
+
+		final long ret = this.nextID++;
 		if (this.nextID < XidTranslator.MIN_XID) {
 			this.nextID = XidTranslator.MIN_XID;
 		}
-		this.xidMap.put(Integer.valueOf(ret), new XidPair<T>(xid, sw));
+		this.xidMap.put(ret, new XidPair<T>(xid, sw));
+
 		return ret;
 	}
-
 }

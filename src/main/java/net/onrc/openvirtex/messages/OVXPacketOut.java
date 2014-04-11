@@ -6,7 +6,6 @@
  * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  ******************************************************************************/
 
-
 package net.onrc.openvirtex.messages;
 
 import java.util.ArrayList;
@@ -22,140 +21,200 @@ import net.onrc.openvirtex.messages.actions.OVXActionNetworkLayerDestination;
 import net.onrc.openvirtex.messages.actions.OVXActionNetworkLayerSource;
 import net.onrc.openvirtex.messages.actions.VirtualizableAction;
 import net.onrc.openvirtex.protocol.OVXMatch;
+import net.onrc.openvirtex.util.OVXUtil;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.OFError.OFBadRequestCode;
-import org.openflow.protocol.OFMatch;
-import org.openflow.protocol.OFPacketOut;
-import org.openflow.protocol.OFPort;
-import org.openflow.protocol.Wildcards.Flag;
-import org.openflow.protocol.action.OFAction;
-import org.openflow.protocol.action.OFActionOutput;
-import org.openflow.util.U16;
+import org.projectfloodlight.openflow.protocol.OFBadRequestCode;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFPacketOut;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFVersion;
+import org.projectfloodlight.openflow.protocol.action.OFAction;
+import org.projectfloodlight.openflow.protocol.action.OFActionOutput;
+import org.projectfloodlight.openflow.protocol.match.*;
+import org.projectfloodlight.openflow.types.EthType;
+import org.projectfloodlight.openflow.types.OFBufferId;
+import org.projectfloodlight.openflow.types.OFPort;
 
-public class OVXPacketOut extends OFPacketOut implements Devirtualizable {
 
-	private final Logger log = LogManager.getLogger(OVXPacketOut.class
-			.getName());
-	private OFMatch match = null;
+public class OVXPacketOut implements Devirtualizable {
+	private final Logger log = LogManager.getLogger(OVXPacketOut.class.getName());
 	private final List<OFAction> approvedActions = new LinkedList<OFAction>();
-
+	private OFPacketOut po;
+	private Match match;
+	
 	@Override
 	public void devirtualize(final OVXSwitch sw) {
-
-		final OVXPort inport = sw.getPort(this.getInPort());
+		final OVXPort inport = sw.getPort(this.po.getInPort().getPortNumber());
 		OVXMatch ovxMatch = null;
 
-		if (this.getBufferId() == OVXPacketOut.BUFFER_ID_NONE) {
-			if (this.getPacketData().length <= 14) {
-				this.log.error("PacketOut has no buffer or data {}; dropping",
-						this);
+		if (this.po.getBufferId() == OFBufferId.NO_BUFFER) {
+			if (this.po.getData().length <= 14) {
+				this.log.error("PacketOut has no buffer or data {}; dropping", this.po);
 				sw.sendMsg(OVXMessageUtil.makeErrorMsg(
-						OFBadRequestCode.OFPBRC_BAD_LEN, this), sw);
+						OFBadRequestCode.BAD_LEN, this.po), sw);
 				return;
 			}
-			this.match = new OFMatch().loadFromPacket(this.packetData,
-					this.inPort);
-			ovxMatch = new OVXMatch(match);
-			ovxMatch.setPktData(this.packetData);
+
+			this.match = OVXUtil.loadMatchFromEthPacket(this.po.getData(), 
+					this.po.getInPort().getPortNumber(), this.po.getVersion());
+	    	
+			ovxMatch = new OVXMatch(this.match);
+			ovxMatch.setPktData(this.po.getData());
 		} else {
-			final OVXPacketIn cause = sw.getFromBufferMap(this.bufferId);
+			final OVXPacketIn cause = sw.getFromBufferMap(this.po.getBufferId().getInt());
 			if (cause == null) {
 				this.log.error(
 						"Unknown buffer id {} for virtual switch {}; dropping",
-						this.bufferId, sw);
+						this.po.getBufferId().getInt(), sw);
 				return;
 			}
 
-			this.match = new OFMatch().loadFromPacket(cause.getPacketData(),
-					this.inPort);
-			this.setBufferId(cause.getBufferId());
-			ovxMatch = new OVXMatch(match);
-			ovxMatch.setPktData(cause.getPacketData());
-			if (cause.getBufferId() == OVXPacketOut.BUFFER_ID_NONE) {
-				this.setPacketData(cause.getPacketData());
-				this.setLengthU(this.getLengthU() + this.packetData.length);
+	    	this.match = OVXUtil.loadMatchFromEthPacket(cause.getData(), 
+	    			this.po.getInPort().getPortNumber(), this.po.getVersion());
+	    	
+			this.po = this.po.createBuilder()
+					.setBufferId(cause.getBufferId())
+					.build();
+			
+			ovxMatch = new OVXMatch(this.match);
+			ovxMatch.setPktData(cause.getData());
+			if (cause.getBufferId() == OFBufferId.NO_BUFFER) {
+				this.po = this.po.createBuilder()
+						.setData(cause.getData())
+						.build();
 			}
 		}
 
 		for (final OFAction act : this.getActions()) {
 			try {
-				((VirtualizableAction) act).virtualize(sw,
+				((VirtualizableAction) OVXMessageFactory.getAction(act)).virtualize(sw, 
 						this.approvedActions, ovxMatch);
-
 			} catch (final ActionVirtualizationDenied e) {
 				this.log.warn("Action {} could not be virtualized; error: {}",
 						act, e.getMessage());
-				sw.sendMsg(OVXMessageUtil.makeError(e.getErrorCode(), this), sw);
+				sw.sendMsg(OVXMessageUtil.makeErrorMsg(e.getErrorCode(), this.po), sw);
 				return;
 			} catch (final DroppedMessageException e) {
-				this.log.debug("Dropping packetOut {}", this);
+				this.log.debug("Dropping packetOut {}", this.po);
 				return;
 			}
 		}
-
-		if (U16.f(this.getInPort()) < U16.f(OFPort.OFPP_MAX.getValue()))
-			this.setInPort(inport.getPhysicalPortNumber());
+		
+		if (this.getInPort().getShortPortNumber() < OFPort.MAX.getShortPortNumber())
+			this.po = this.po.createBuilder()
+			.setInPort(OFPort.of(inport.getPhysicalPortNumber()))
+			.build();
+		
 		this.prependRewriteActions(sw);
-		this.setActions(this.approvedActions);
-		this.setActionsLength((short) 0);
-		this.setLengthU(OVXPacketOut.MINIMUM_LENGTH + this.packetData.length);
-		for (final OFAction act : this.approvedActions) {
-			this.setLengthU(this.getLengthU() + act.getLengthU());
-			this.setActionsLength((short) (this.getActionsLength() + act
-					.getLength()));
-		}
+		this.po = this.po.createBuilder()
+				.setActions(this.approvedActions)
+				.build();
 
 		//TODO: Beacon sometimes send msg with inPort == controller, check with Ayaka if it's ok
-		if (U16.f(this.getInPort()) < U16.f(OFPort.OFPP_MAX.getValue()))
-			OVXMessageUtil.translateXid(this, inport);
-		this.log.debug("Sending packet-out to sw {}: {}", sw.getName(), this);
-		sw.sendSouth(this, inport);
+		if (this.getInPort().getShortPortNumber() < OFPort.MAX.getShortPortNumber())
+			OVXMessageUtil.translateXid(this.po, inport);
+		this.log.debug("Sending packet-out to sw {}: {}", sw.getName(), this.po);
+		sw.sendSouth(this.po, inport);
 	}
 
 	private void prependRewriteActions(final OVXSwitch sw) {
-		if (!this.match.getWildcardObj().isWildcarded(Flag.NW_SRC)) {
-			final OVXActionNetworkLayerSource srcAct = new OVXActionNetworkLayerSource();
-			srcAct.setNetworkAddress(IPMapper.getPhysicalIp(sw.getTenantId(), this.match.getNetworkSource()));
-			this.approvedActions.add(0, srcAct);
-		}
+		if (this.match.get(MatchField.ETH_TYPE) == EthType.ARP) {
+			if (this.match.isExact(MatchField.ARP_SPA)) {
+				final OVXActionNetworkLayerSource srcAct = 
+						new OVXActionNetworkLayerSource(this.getVersion());
+				srcAct.setNetworkAddress(IPMapper.getPhysicalIp(sw.getTenantId(), 
+						this.match.get(MatchField.ARP_SPA).getInt()));
+				this.approvedActions.add(0, srcAct.getAction());
+			}
+			
+			if (this.match.isExact(MatchField.ARP_TPA)) {
+				final OVXActionNetworkLayerDestination dstAct = 
+						new OVXActionNetworkLayerDestination(this.getVersion());
+				dstAct.setNetworkAddress(IPMapper.getPhysicalIp(sw.getTenantId(), 
+						this.match.get(MatchField.ARP_TPA).getInt()));
+				this.approvedActions.add(0, dstAct.getAction());
+			}
+		} else if (this.match.get(MatchField.ETH_TYPE) == EthType.IPv4) {
+			if (this.match.isExact(MatchField.IPV4_SRC)) {
+				final OVXActionNetworkLayerSource srcAct = 
+						new OVXActionNetworkLayerSource(this.getVersion());
+				srcAct.setNetworkAddress(IPMapper.getPhysicalIp(sw.getTenantId(), 
+						this.match.get(MatchField.IPV4_SRC).getInt()));
+				this.approvedActions.add(0, srcAct.getAction());
+			}
 
-		if (!this.match.getWildcardObj().isWildcarded(Flag.NW_DST)) {
-			final OVXActionNetworkLayerDestination dstAct = new OVXActionNetworkLayerDestination();
-			dstAct.setNetworkAddress(IPMapper.getPhysicalIp(sw.getTenantId(), this.match.getNetworkDestination()));
-			this.approvedActions.add(0, dstAct);
+			if (this.match.isExact(MatchField.IPV4_DST)) {
+				final OVXActionNetworkLayerDestination dstAct = 
+						new OVXActionNetworkLayerDestination(this.getVersion());
+				dstAct.setNetworkAddress(IPMapper.getPhysicalIp(sw.getTenantId(), 
+						this.match.get(MatchField.IPV4_DST).getInt()));
+				this.approvedActions.add(0, dstAct.getAction());
+			}
 		}
 	}
 
 	public OVXPacketOut(final OVXPacketOut pktOut) {
-		this.bufferId = pktOut.bufferId;
-		this.inPort = pktOut.inPort;
-		this.length = pktOut.length;
-		this.packetData = pktOut.packetData;
-		this.type = pktOut.type;
-		this.version = pktOut.version;
-		this.xid = pktOut.xid;
-		this.actions = pktOut.actions;
-		this.actionsLength = pktOut.actionsLength;
+		this.po = OFFactories.getFactory(pktOut.getVersion())
+				.buildPacketOut()
+				.setBufferId(pktOut.getBufferId())
+				.setInPort(pktOut.getInPort())
+				.setData(pktOut.getData())
+				.setXid(pktOut.getXid())
+				.setActions(pktOut.getActions())
+				.build();
 	}
-
-	public OVXPacketOut() {
-		super();
+		
+	public OVXPacketOut(OFMessage m) {
+		this.po = (OFPacketOut) m;
 	}
+	
+	public OVXPacketOut(final byte[] pktData, final int inPort, final int outPort, 
+			final OFVersion ofversion) {
+		final OFActionOutput outAction = OFFactories.getFactory(ofversion)
+				.actions()
+				.buildOutput()
+				.setPort(OFPort.of(outPort))
+				.build();
 
-	public OVXPacketOut (final byte[] pktData,
-			final short inPort, final short outPort) {
-		this.setInPort(inPort);
-		this.setBufferId(OFPacketOut.BUFFER_ID_NONE);
-		final OFActionOutput outAction = new OFActionOutput(outPort);
 		final ArrayList<OFAction> actions = new ArrayList<OFAction>();
 		actions.add(outAction);
-		this.setActions(actions);
-		this.setActionsLength(outAction.getLength());
-		this.setPacketData(pktData);
-		this.setLengthU((short) (OFPacketOut.MINIMUM_LENGTH
-				+ this.getPacketData().length + OFActionOutput.MINIMUM_LENGTH));
+
+		this.po = OFFactories.getFactory(ofversion)
+				.buildPacketOut()
+				.setInPort(OFPort.of(inPort))
+				.setBufferId(OFBufferId.NO_BUFFER)
+				.setActions(actions)
+				.setData(pktData)
+				.build();
+	}
+	
+	public OFVersion getVersion() {
+		return this.po.getVersion();
+	}
+	
+	public OFBufferId getBufferId() {
+		return this.po.getBufferId();
 	}
 
+	public OFPort getInPort() {
+		return this.po.getInPort();
+	}
+	
+	public byte[] getData() {
+		return this.po.getData();
+	}
+
+	public long getXid() {
+		return this.po.getXid();
+	}
+
+	public List<OFAction> getActions() {
+		return this.po.getActions();
+	}
+
+	public OFPacketOut getPacket() {
+		return this.po;
+	}
 }

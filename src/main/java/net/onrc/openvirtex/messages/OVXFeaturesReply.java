@@ -11,9 +11,7 @@ package net.onrc.openvirtex.messages;
 
 import net.onrc.openvirtex.elements.datapath.PhysicalSwitch;
 
-import org.openflow.protocol.OFFeaturesReply;
-
-public class OVXFeaturesReply extends OFFeaturesReply implements Virtualizable {
+public class OVXFeaturesReply implements Virtualizable {
 
 	@Override
 	public void virtualize(final PhysicalSwitch sw) {
@@ -21,5 +19,4 @@ public class OVXFeaturesReply extends OFFeaturesReply implements Virtualizable {
 		return;
 
 	}
-
 }

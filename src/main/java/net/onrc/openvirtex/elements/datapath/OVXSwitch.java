@@ -11,6 +11,7 @@ package net.onrc.openvirtex.elements.datapath;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,7 @@ import net.onrc.openvirtex.exceptions.IndexOutOfBoundException;
 import net.onrc.openvirtex.exceptions.UnknownRoleException;
 import net.onrc.openvirtex.messages.Devirtualizable;
 import net.onrc.openvirtex.messages.OVXFlowMod;
+import net.onrc.openvirtex.messages.OVXMessageFactory;
 import net.onrc.openvirtex.messages.OVXMessageUtil;
 import net.onrc.openvirtex.messages.OVXPacketIn;
 import net.onrc.openvirtex.util.BitSetIndex;
@@ -46,72 +48,68 @@ import net.onrc.openvirtex.util.BitSetIndex.IndexType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jboss.netty.channel.Channel;
-import org.openflow.protocol.OFFeaturesReply;
-import org.openflow.protocol.OFMessage;
-import org.openflow.protocol.OFPhysicalPort;
-import org.openflow.protocol.OFPort;
-import org.openflow.protocol.OFVendor;
-import org.openflow.protocol.OFError.OFBadRequestCode;
-import org.openflow.util.LRULinkedHashMap;
-import org.openflow.vendor.nicira.OFNiciraVendorData;
-import org.openflow.vendor.nicira.OFRoleReplyVendorData;
-import org.openflow.vendor.nicira.OFRoleRequestVendorData;
+import org.projectfloodlight.openflow.protocol.*;
+import org.projectfloodlight.openflow.types.DatapathId;
+import org.projectfloodlight.openflow.types.MacAddress;
+import org.projectfloodlight.openflow.types.OFPort;
+import org.projectfloodlight.openflow.types.U64;
+import org.projectfloodlight.openflow.util.LRULinkedHashMap;
+import org.projectfloodlight.openflow.protocol.OFNiciraControllerRoleRequest;
+import org.projectfloodlight.openflow.protocol.OFNiciraControllerRoleReply;
 
 /**
  * The Class OVXSwitch.
  */
 public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
-
-	private static Logger log = LogManager.getLogger(OVXSwitch.class
+	private Logger log = LogManager.getLogger(OVXSwitch.class
 			.getName());
 
 	/**
 	 * Datapath description string should this be made specific per type of
 	 * virtual switch
 	 */
-	public static final String                       DPDESCSTRING     = "OpenVirteX Virtual Switch";
-
-	/** The supported actions. */
-	protected static int                             supportedActions = 0xFFF;
+	public static final String                          DPDESCSTRING     = "OpenVirteX Virtual Switch";
 
 	/** The buffer dimension. */
-	protected static int                             bufferDimension  = 4096;
+	protected static int                                bufferDimension  = 4096;
+
+	/** The supported actions. */
+	protected Set<OFActionType>                         supportedActions = null;
 
 	/** The tenant id. */
-	protected Integer                                tenantId         = 0;
+	protected Integer                                   tenantId         = 0;
 
 	/** The miss send len. Default in spec is 128 */
-	protected Short                                  missSendLen      = 128; 
+	protected Integer                                   missSendLen      = 128; 
 
 	/** The is active. */
-	protected boolean                                isActive         = false;
+	protected boolean                                   isActive         = false;
 
 	/** The capabilities. */
-	protected OVXSwitchCapabilities                  capabilities;
+	protected OVXSwitchCapabilities                     capabilities;
 
 	/** The backoff counter for this switch when unconnected */
-	private AtomicInteger                            backOffCounter   = null;
+	private AtomicInteger                               backOffCounter   = null;
 
 	/**
 	 * The buffer map
 	 */
-	protected LRULinkedHashMap<Integer, OVXPacketIn> bufferMap;
+	protected LRULinkedHashMap<Integer, OVXPacketIn>    bufferMap;
 
-	private AtomicInteger                            bufferId         = null;
+	private AtomicInteger                               bufferId         = null;
 
-	private final BitSetIndex                      portCounter;
+	private final BitSetIndex                           portCounter;
 
 	/**
 	 * The virtual flow table
 	 */
-	protected FlowTable                           flowTable;
+	protected FlowTable                                 flowTable;
 	
-	
-	
+	private OFVersion                                   ofversion;	
 	/**
 	 * Used to save which channel the message came in on.
 	 */
-	private final XidTranslator<Channel> channelMux;
+	private final XidTranslator<Channel>                channelMux;
 
 	/**
 	 * Role Manager. Saves all role requests coming 
@@ -119,7 +117,7 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 * for permitting or denying certain operations
 	 * based on the current role of a controller.
 	 */
-	private final RoleManager roleMan;
+	private final RoleManager                           roleMan;
 
 	/**
 	 * Instantiates a new OVX switch.
@@ -129,7 +127,7 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 * @param tenantId
 	 *            the tenant id
 	 */
-	protected OVXSwitch(final Long switchId, final Integer tenantId) {
+	protected OVXSwitch(final Long switchId, final Integer tenantId, final OFVersion ofversion) {
 		super(switchId);
 		this.tenantId = tenantId;
 		this.missSendLen = 0;
@@ -144,9 +142,13 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 		this.flowTable = new OVXFlowTable(this);
 		this.roleMan = new RoleManager();
 		this.channelMux = new XidTranslator<Channel>();
-		
+		this.ofversion = ofversion;
+		// Supporting all the actions 
+		this.supportedActions = new HashSet<OFActionType>();
+		for(OFActionType action : OFActionType.values()){
+			this.supportedActions.add(action);
+		}	
 	}
-	
 	
 
 	/**
@@ -163,7 +165,7 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 * 
 	 * @return the miss send len
 	 */
-	public short getMissSendLen() {
+	public int getMissSendLen() {
 		return this.missSendLen;
 	}
 
@@ -174,7 +176,7 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 *            the miss send len
 	 * @return true, if successful
 	 */
-	public boolean setMissSendLen(final Short missSendLen) {
+	public boolean setMissSendLen(final Integer missSendLen) {
 		this.missSendLen = missSendLen;
 		return true;
 	}
@@ -205,10 +207,14 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 *            the ovx port number
 	 * @return the physical port number
 	 */
-	public Short getPhysicalPortNumber(final Short ovxPortNumber) {
+	public Integer getPhysicalPortNumber(final OFPort ovxPortNumber) {
 		return this.portMap.get(ovxPortNumber).getPhysicalPortNumber();
 	}
-
+	
+	public OFVersion getVersion() {
+		return ofversion;
+	}
+	
 	public void resetBackOff() {
 		this.backOffCounter.set(-1);
 	}
@@ -217,27 +223,40 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 		return this.backOffCounter.incrementAndGet();
 	}
 
-	public short getNextPortNumber() throws IndexOutOfBoundException {
-		return this.portCounter.getNewIndex().shortValue();
+	public int getNextPortNumber() throws IndexOutOfBoundException {
+		return this.portCounter.getNewIndex();
 	}
 
-	public void relesePortNumber(short portNumber) {
-		this.portCounter.releaseIndex((int) portNumber);
+	public void relesePortNumber(OFPort portNumber) {
+		this.portCounter.releaseIndex(portNumber.getPortNumber());
 	}
 
-	protected void addDefaultPort(final LinkedList<OFPhysicalPort> ports) {
-		final OFPhysicalPort port = new OFPhysicalPort();
-		port.setPortNumber(OFPort.OFPP_LOCAL.getValue());
-		port.setName("OpenFlow Local Port");
-		port.setConfig(1);
+	protected void addDefaultPort(final LinkedList<OFPortDesc> ports) {
+	
+		Set<OFPortConfig> portconfig = new HashSet<OFPortConfig>();
+		portconfig.add(OFPortConfig.PORT_DOWN);
+		
+		Set<OFPortState> portstate = new HashSet<OFPortState>();
+		portstate.add(OFPortState.LINK_DOWN);
+		
+		Set<OFPortFeatures> portfeatures = new HashSet<OFPortFeatures>();
+		portfeatures.add(OFPortFeatures.PF_COPPER);
+		
 		final byte[] addr = { (byte) 0xA4, (byte) 0x23, (byte) 0x05,
 				(byte) 0x00, (byte) 0x00, (byte) 0x00 };
-		port.setHardwareAddress(addr);
-		port.setState(1);
-		port.setAdvertisedFeatures(0);
-		port.setCurrentFeatures(0);
-		port.setSupportedFeatures(0);
-		ports.add(port);
+		
+		OFPortDesc pd = OFFactories.getFactory(ofversion)
+				.buildPortDesc()
+				.setPortNo(OFPort.LOCAL)
+				.setName("OF Local Port")
+				.setHwAddr(MacAddress.of(addr))
+				.setConfig(portconfig)
+				.setState(portstate)
+				.setAdvertised(portfeatures)
+				.setCurr(portfeatures)
+				.setSupported(portfeatures)
+				.build();
+		ports.add(pd);
 	}
 
 	public void register(final List<PhysicalSwitch> physicalSwitches) {
@@ -253,13 +272,14 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 			try {
 				net = this.getMap().getVirtualNetwork(this.tenantId);
 			} catch (NetworkMappingException e) {
-				log.error("Error retrieving the network with id {}. Unregister for OVXSwitch {} not fully done!", this.getTenantId(), this.getSwitchName());
+				log.error("Error retrieving the network with id {}. Unregister for OVXSwitch {} not fully done!", 
+						this.getTenantId(), this.getSwitchName());
 				return;
 			}
-			final Set<Short> portSet = new TreeSet<Short>(this.getPorts()
-					.keySet());
-			for (final Short portNumber : portSet) {
-				final OVXPort port = this.getPort(portNumber);
+			final Set<Integer> portSet = new TreeSet<Integer>(this.getPorts().keySet());
+			
+			for (final Integer set_port : portSet) {
+				final OVXPort port = this.getPort(set_port);
 				if (port.isEdge()) {
 					Host h = net.getHost(port);
 					if (h != null) 
@@ -290,12 +310,12 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 			physicalSwitches = this.map.getPhysicalSwitches(this);
 		} catch (SwitchMappingException e) {
 			if (!isOk)
-				log.warn("Failed to cleanUp flowmods for tenant {} on switch {}", this.tenantId, this.getSwitchName());
+				log.warn("Failed to cleanUp flowmods for tenant {} on switch {}", 
+						this.tenantId, this.getSwitchName());
 			return;
 		}
 		for (PhysicalSwitch sw : physicalSwitches) 
-			sw.cleanUpTenant(this.tenantId, (short) 0);
-
+			sw.cleanUpTenant(this.tenantId, 0);
 	}
 
 	@Override
@@ -342,29 +362,17 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 			if (p.isLink()) 
 				p.tearDown();
 		}
-	
 	}
 
 	/**
 	 * Generate features reply.
 	 */
 	public void generateFeaturesReply() {
-		final OFFeaturesReply ofReply = new OFFeaturesReply();
-		ofReply.setDatapathId(this.switchId);
-		final LinkedList<OFPhysicalPort> portList = new LinkedList<OFPhysicalPort>();
+		final LinkedList<OFPortDesc> portList = new LinkedList<OFPortDesc>();
 		for (final OVXPort ovxPort : this.portMap.values()) {
-			final OFPhysicalPort ofPort = new OFPhysicalPort();
-			ofPort.setPortNumber(ovxPort.getPortNumber());
-			ofPort.setName(ovxPort.getName());
-			ofPort.setConfig(ovxPort.getConfig());
-			ofPort.setHardwareAddress(ovxPort.getHardwareAddress());
-			ofPort.setState(ovxPort.getState());
-			ofPort.setAdvertisedFeatures(ovxPort.getAdvertisedFeatures());
-			ofPort.setCurrentFeatures(ovxPort.getCurrentFeatures());
-			ofPort.setSupportedFeatures(ovxPort.getSupportedFeatures());
-			portList.add(ofPort);
+			portList.add(ovxPort.getDesc());
 		}
-
+		
 		/*
 		 * Giving the switch a port (the local port) which is set
 		 * administratively down.
@@ -373,16 +381,22 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 		 * interesting.
 		 */
 		this.addDefaultPort(portList);
-		ofReply.setPorts(portList);
-		ofReply.setBuffers(OVXSwitch.bufferDimension);
-		ofReply.setTables((byte) 1);
-		ofReply.setCapabilities(this.capabilities.getOVXSwitchCapabilities());
-		ofReply.setActions(OVXSwitch.supportedActions);
-		ofReply.setXid(0);
-		ofReply.setLengthU(OFFeaturesReply.MINIMUM_LENGTH
-				+ OFPhysicalPort.MINIMUM_LENGTH * portList.size());
+		
+		OFFeaturesReply fr = OFFactories.getFactory(ofversion)
+				.buildFeaturesReply()
+				.setDatapathId(DatapathId.of(this.switchId))
+				.setPorts(portList)
+				.setNBuffers(OVXSwitch.bufferDimension)
+				.setNTables((short)1)
+				.setCapabilities(this.capabilities.getOVXSwitchCapabilities())
+				.setActions(this.supportedActions)
+				.setXid(0)
+				.build();
+		
+		//ofReply.setLengthU(OFFeaturesReply.MINIMUM_LENGTH
+		//		+ OFPhysicalPort.MINIMUM_LENGTH * portList.size());
 
-		this.setFeaturesReply(ofReply);
+		this.setFeaturesReply(fr);
 	}
 
 	/**
@@ -412,12 +426,13 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 */
 	@Override
 	public String toString() {
-		return "SWITCH: switchId: " + this.switchId + " - switchName: "
-				+ this.switchName + " - isConnected: " + this.isConnected
-				+ " - tenantId: " + this.tenantId + " - missSendLength: "
-				+ this.missSendLen + " - isActive: " + this.isActive
-				+ " - capabilities: "
-				+ this.capabilities.getOVXSwitchCapabilities();
+		return "SWITCH: switchId: " + this.switchId 
+					+ " - switchName: " + this.switchName 
+					+ " - isConnected: " + this.isConnected
+					+ " - tenantId: " + this.tenantId 
+					+ " - missSendLength: " + this.missSendLen 
+					+ " - isActive: " + this.isActive
+					+ " - capabilities: " + this.capabilities.getOVXSwitchCapabilities();
 	}
 
 	public synchronized int addToBufferMap(final OVXPacketIn pktIn) {
@@ -431,8 +446,6 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 		return this.bufferMap.get(bufId);
 	}
 
-	
-
 	public FlowTable getFlowTable() {
 		return this.flowTable;
 	}
@@ -441,8 +454,7 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	public int hashCode() {
 		final int prime = 31;
 		int result = 1;
-		result = prime * result
-				+ ((tenantId == null) ? 0 : tenantId.hashCode());
+		result = prime * result + ((tenantId == null) ? 0 : tenantId.hashCode());
 		return result;
 	}
 
@@ -472,22 +484,23 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 * OFMessage, net.onrc.openvirtex.core.io.OVXSendMsg)
 	 */
 	@Override
-	public void sendMsg(final OFMessage msg, final OVXSendMsg from) {
-		
+	public void sendMsg(OFMessage msg, final OVXSendMsg from) {
 		XidPair<Channel> pair = channelMux.untranslate(msg.getXid());
+		
 		Channel c = null;
 		if (pair != null) {
-			msg.setXid(pair.getXid());
+			msg = msg.createBuilder()
+					.setXid(pair.getXid())
+					.build();
 			c = pair.getSwitch();
-		} 
-	
-		if (this.isConnected && this.isActive ) {
+		}
+		
+		if (this.isConnected && this.isActive) {
 			roleMan.sendMsg(msg, c);
 		} else {
 			// TODO: we probably should install a drop rule here.
 			log.warn("Virtual switch {} is not active or is not connected to a controller", switchName);
-		}
-		
+		}	
 	}
 
 	/*
@@ -498,29 +511,33 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 * .OFMessage)
 	 */
 	@Override
-	public void handleIO(final OFMessage msg, Channel channel) {
+	public void handleIO(OFMessage msg, Channel channel) {
 		/*
 		 * Save the channel the msg came in on
 		 */
-		msg.setXid(channelMux.translate(msg.getXid(), channel));
+		//msg.setXid(channelMux.translate(msg.getXid(), channel));
+		long newxid = channelMux.translate(msg.getXid(), channel);
+		msg = msg.createBuilder()
+				.setXid(newxid)
+				.build();
+		
 		try {
 			/*
 			 * Check whether this channel (ie. controller) is permitted 
 			 * to send this msg to the dataplane
 			 */
-			
-			if (this.roleMan.canSend(channel, msg) )
-				((Devirtualizable) msg).devirtualize(this);
+			if (this.roleMan.canSend(channel, msg)) {
+				((Devirtualizable) OVXMessageFactory.getMessage(msg)).devirtualize(this);
+			}
 			else
 				denyAccess(channel, msg, this.roleMan.getRole(channel));
 		} catch (final ClassCastException e) {
-			OVXSwitch.log.error("Received illegal message : " + msg);
+			this.log.error("Received illegal message: {} error {}", msg, e);
 		}
 	}
 	
 	@Override
-	public void handleRoleIO(OFVendor msg, Channel channel) {
-
+	public void handleRoleIO(OFExperimenter msg, Channel channel) {
 		Role role = extractNiciraRoleRequest(channel, msg);
 		try {
 			this.roleMan.setRole(channel, role);
@@ -528,9 +545,7 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 			log.info("Finished handling role for {}", channel.getRemoteAddress() );
 		} catch (IllegalArgumentException | UnknownRoleException ex) {
 			log.warn(ex.getMessage());
-		} 
-
-
+		}
 	}
 
 	/**
@@ -542,7 +557,7 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 * @throws MappingException 
 	 */
 	public OVXFlowMod getFlowMod(final Long cookie) throws MappingException {
-		return this.flowTable.getFlowMod(cookie).clone();
+		return this.flowTable.getFlowMod(U64.of(cookie));
 	}
 	
 	public void setChannel(Channel channel) {
@@ -553,7 +568,6 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 		this.roleMan.removeChannel(channel);
 	}
 	
-	
 	/**
 	 * Remove an entry in the mapping
 	 * 
@@ -561,47 +575,54 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 * @return The deleted FlowMod
 	 */
 	public OVXFlowMod deleteFlowMod(final Long cookie) {
-		return this.flowTable.deleteFlowMod(cookie);
+		return this.flowTable.deleteFlowMod(U64.of(cookie));
 	}
 	
-	private Role extractNiciraRoleRequest(Channel chan,
-			OFVendor vendorMessage) {
-		int vendor = vendorMessage.getVendor();
-		if (vendor != OFNiciraVendorData.NX_VENDOR_ID)
-			return null;
-		if (! (vendorMessage.getVendorData() instanceof OFRoleRequestVendorData))
-			return null;
-		OFRoleRequestVendorData roleRequestVendorData =
-				(OFRoleRequestVendorData) vendorMessage.getVendorData();
-		Role role = Role.fromNxRole(roleRequestVendorData.getRole());
+	private Role extractNiciraRoleRequest(Channel chan, OFExperimenter experimenterMessage) {		
+		//long experimenter = experimenterMessage.getExperimenter();
+		//if (experimenter != 0x2320L || !(experimenterMessage instanceof OFNiciraControllerRoleRequest))	
+		//	return null;
+		
+		if (!(experimenterMessage instanceof OFNiciraControllerRoleRequest))
+			return null;		
+		
+		OFNiciraControllerRoleRequest rr = (OFNiciraControllerRoleRequest) experimenterMessage;
+		
+		Role role = Role.fromNxRole(rr.getRole().ordinal());
+		
 		if (role == null) {
 			String msg = String.format("Controller: [%s], State: [%s], "
-					+ "received NX_ROLE_REPLY with invalid role "
+					+ "received ROLE_REPLY with invalid role "
 					+ "value %d",
 					chan.getRemoteAddress(),
 					this.toString(),
-					roleRequestVendorData.getRole());
+					rr.getRole());
 			throw new ControllerStateException(msg);
 		}
 		return role;
 	}
 	
 	private void denyAccess(Channel channel, OFMessage m, Role role) {
-		log.warn("Controller {} may not send message {} because role state is {}", channel.getRemoteAddress(), m, role);
-		OFMessage e = OVXMessageUtil.makeErrorMsg(OFBadRequestCode.OFPBRC_EPERM, m);
+		log.warn("Controller {} may not send message {} because role state is {}", 
+				channel.getRemoteAddress(), m, role);
+		OFMessage e = OVXMessageUtil.makeErrorMsg(OFBadRequestCode.EPERM, m);
 		channel.write(Collections.singletonList(e));
 	}
 
-	
-	
-	private void sendRoleReply(Role role, int xid, Channel channel) {
-		OFVendor vendor = new OFVendor();
-		vendor.setXid(xid);
-		vendor.setVendor(OFNiciraVendorData.NX_VENDOR_ID);
-		OFRoleReplyVendorData reply = new OFRoleReplyVendorData(role.toNxRole());
-		vendor.setVendorData(reply);
-		vendor.setLengthU(OFVendor.MINIMUM_LENGTH + reply.getLength());
-		channel.write(Collections.singletonList(vendor));
+	private void sendRoleReply(Role role, long xid, Channel channel) {
+		OFNiciraControllerRoleReply rr = OFFactories.getFactory(this.ofversion)
+				.buildNiciraControllerRoleReply()
+				.setXid(xid)
+				.setRole(OFNiciraControllerRole.values()[role.ordinal()])
+				.build();
+		
+		//vendor.setXid(xid);
+		//vendor.setVendor(OFNiciraVendorData.NX_VENDOR_ID);
+		//OFRoleReplyVendorData reply = new OFRoleReplyVendorData(role.toNxRole());
+		//vendor.setVendorData(reply);
+		//vendor.setLengthU(OFVendor.MINIMUM_LENGTH + reply.getLength());
+		
+		channel.write(Collections.singletonList(rr));
 	}
 
 	/**
@@ -612,7 +633,7 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 * @return the new message XID
 	 * @throws SwitchMappingException 
 	 */
-	public abstract int translate(OFMessage msg, OVXPort inPort);
+	public abstract long translate(OFMessage msg, OVXPort inPort);
 
 	/**
 	 * Sends a message towards the physical network, via the PhysicalSwitch mapped to this OVXSwitch. 
@@ -625,7 +646,5 @@ public abstract class OVXSwitch extends Switch<OVXPort> implements Persistable {
 	 * @param inPort The ingress port
 	 */
 	public abstract void sendSouth(OFMessage msg, OVXPort inPort);
-	
-	
 
 }

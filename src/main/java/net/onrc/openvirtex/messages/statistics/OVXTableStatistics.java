@@ -9,20 +9,25 @@
 
 package net.onrc.openvirtex.messages.statistics;
 
-import java.util.Collections;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFTableStatsEntry;
+import org.projectfloodlight.openflow.protocol.OFTableStatsReply;
+import org.projectfloodlight.openflow.protocol.OFVersion;
+import org.projectfloodlight.openflow.types.TableId;
+
+import com.google.common.collect.ImmutableList;
 
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 import net.onrc.openvirtex.elements.datapath.PhysicalSwitch;
 import net.onrc.openvirtex.messages.OVXStatisticsReply;
 import net.onrc.openvirtex.messages.OVXStatisticsRequest;
 
-import org.openflow.protocol.OFMatch;
-import org.openflow.protocol.statistics.OFStatisticsType;
-import org.openflow.protocol.statistics.OFTableStatistics;
-
-public class OVXTableStatistics extends OFTableStatistics implements
-		VirtualizableStatistic, DevirtualizableStatistic {
-
+public class OVXTableStatistics  implements VirtualizableStatistic, DevirtualizableStatistic {
+	private OFTableStatsEntry tse;
+	
+	public OVXTableStatistics(OFVersion ofVersion) {
+		this.tse = OFFactories.getFactory(ofVersion).buildTableStatsEntry().build();
+	}
 	
 	/*
 	 * TODO
@@ -34,24 +39,46 @@ public class OVXTableStatistics extends OFTableStatistics implements
 	@Override
 	public void devirtualizeStatistic(final OVXSwitch sw,
 			final OVXStatisticsRequest msg) {
-		this.activeCount = sw.getFlowTable().getFlowTable().size();
-		this.tableId = 1;
+		
+	    //public final static int NW_SRC_ALL_VAL = 0x2000;
+	    //public final static int NW_DST_ALL_VAL = 0x80000;
+	    //public final static int ALL_VAL = 0x3fffff;
+	    
+		this.tse = this.tse.createBuilder()
+				.setActiveCount(sw.getFlowTable().getFlowTable().size())
+				.setTableId(TableId.of(1))
+				.setName("OVX vFlowTable (incomplete)")
+				.setMaxEntries(100000)
+				.setWildcards(0x3fffff & ~0x80000 & ~0x2000)
+				.build(); // see above
+		
+		OFTableStatsReply reply = OFFactories.getFactory(sw.getVersion())
+				.buildTableStatsReply()
+				.setXid(msg.getXid())
+				.setEntries(ImmutableList.<OFTableStatsEntry> of(this.tse))
+				.build();
+
+		sw.sendMsg(reply, sw);
+		
+		//this.activeCount = sw.getFlowTable().getFlowTable().size();
+		//this.tableId = 1;
 		/*
 		 * FIXME
 		 * Currently preventing controllers from wildcarding the IP
 		 * field. That is if they actually look at this field.
 		 */
-		this.wildcards = OFMatch.OFPFW_ALL 
-				& ~OFMatch.OFPFW_NW_DST_ALL 
-				& ~OFMatch.OFPFW_NW_DST_ALL;
-		this.name = "OVX vFlowTable (incomplete)";
-		this.maximumEntries = 100000;
-		OVXStatisticsReply reply = new OVXStatisticsReply();
-		reply.setXid(msg.getXid());
-		reply.setStatisticType(OFStatisticsType.TABLE);
-		reply.setStatistics(Collections.singletonList(this));
-		reply.setLengthU(OVXStatisticsReply.MINIMUM_LENGTH + this.getLength());
-		sw.sendMsg(reply, sw);
+		//this.wildcards = OFMatch.OFPFW_ALL 
+		//		& ~OFMatch.OFPFW_NW_DST_ALL 
+		//		& ~OFMatch.OFPFW_NW_DST_ALL;
+		//this.name = "OVX vFlowTable (incomplete)";
+		//this.maximumEntries = 100000;
+		/*
+		OVXStatisticsReply reply = new OVXStatisticsReply(OFStatsType.TABLE, sw.getVersion());
+		reply.setXid(msg.getXid())
+			 .setStatistics(Collections.singletonList(this.tseb.build()));
+		*/
+		//reply.setLengthU(OVXStatisticsReply.MINIMUM_LENGTH + this.getLength());
+		//sw.sendMsg(reply.getStatsReply(), sw);
 	}
 
 	@Override
@@ -60,5 +87,4 @@ public class OVXTableStatistics extends OFTableStatistics implements
 		// TODO Auto-generated method stub
 
 	}
-
 }

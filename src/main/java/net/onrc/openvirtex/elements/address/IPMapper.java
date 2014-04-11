@@ -13,9 +13,10 @@ import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.OFMatch;
-import org.openflow.protocol.Wildcards.Flag;
-import org.openflow.protocol.action.OFAction;
+import org.projectfloodlight.openflow.protocol.action.OFAction;
+import org.projectfloodlight.openflow.protocol.match.*;
+import org.projectfloodlight.openflow.types.EthType;
+import org.projectfloodlight.openflow.types.IPv4Address;
 
 import net.onrc.openvirtex.elements.Mappable;
 import net.onrc.openvirtex.elements.OVXMap;
@@ -38,6 +39,7 @@ public class IPMapper {
     		} else {
     			pip = new PhysicalIPAddress(map.getVirtualNetwork(tenantId).nextIP());
     			log.debug("Adding IP mapping {} -> {} for tenant {}", vip, pip, tenantId);
+    			
     			map.addIP(pip, vip);
     		}
     		return pip.getIp();
@@ -51,37 +53,83 @@ public class IPMapper {
     	return 0;
     }
 
-    public static void rewriteMatch(final Integer tenantId, final OFMatch match) {
-    	match.setNetworkSource(getPhysicalIp(tenantId, match.getNetworkSource()));
-    	match.setNetworkDestination(getPhysicalIp(tenantId, match.getNetworkDestination()));
+    public static void rewriteMatch(final Integer tenantId, Match m) {
+    	if (m.get(MatchField.ETH_TYPE) == EthType.IPv4) {
+    		m = m.createBuilder().setExact(MatchField.IPV4_SRC, 
+    				IPv4Address.of(getPhysicalIp(tenantId, m.get(MatchField.IPV4_SRC).getInt()))).build();
+    		m = m.createBuilder().setExact(MatchField.IPV4_DST, 
+    				IPv4Address.of(getPhysicalIp(tenantId, m.get(MatchField.IPV4_DST).getInt()))).build();
+    	} else if (m.get(MatchField.ETH_TYPE) == EthType.ARP) {
+    		m = m.createBuilder().setExact(MatchField.ARP_SPA, 
+    				IPv4Address.of(getPhysicalIp(tenantId, m.get(MatchField.ARP_SPA).getInt()))).build();
+    		m = m.createBuilder().setExact(MatchField.ARP_TPA, 
+    				IPv4Address.of(getPhysicalIp(tenantId, m.get(MatchField.ARP_TPA).getInt()))).build();
+    	}
+    	
+    	//match.setNetworkSource(getPhysicalIp(tenantId, match.getNetworkSource()));
+    	//match.setNetworkDestination(getPhysicalIp(tenantId, match.getNetworkDestination()));
     }
 
-    public static List<OFAction> prependRewriteActions(final Integer tenantId, final OFMatch match) {
+    public static List<OFAction> prependRewriteActions(final Integer tenantId, final Match match) {
     	final List<OFAction> actions = new LinkedList<OFAction>();
-    	if (!match.getWildcardObj().isWildcarded(Flag.NW_SRC)) {
-    		final OVXActionNetworkLayerSource srcAct = new OVXActionNetworkLayerSource();
-    		srcAct.setNetworkAddress(getPhysicalIp(tenantId, match.getNetworkSource()));
-    		actions.add(srcAct);
-    	}
-    	if (!match.getWildcardObj().isWildcarded(Flag.NW_DST)) {
-    		final OVXActionNetworkLayerDestination dstAct = new OVXActionNetworkLayerDestination();
-    		dstAct.setNetworkAddress(getPhysicalIp(tenantId, match.getNetworkDestination()));
-    		actions.add(dstAct);
+    	
+    	if (match.get(MatchField.ETH_TYPE) == EthType.IPv4) {
+    		if(match.isExact(MatchField.IPV4_SRC)) {
+    			final OVXActionNetworkLayerSource srcAct = new OVXActionNetworkLayerSource(match.getVersion());
+    			//srcAct.setNetworkAddress(getPhysicalIp(tenantId, match.getNetworkSource()));
+    			srcAct.setNetworkAddress(getPhysicalIp(tenantId, match.get(MatchField.IPV4_SRC).getInt()));
+    			actions.add(srcAct.getAction());
+    		}
+    		
+    		if (match.isExact(MatchField.IPV4_DST)) {
+    			final OVXActionNetworkLayerDestination dstAct = new OVXActionNetworkLayerDestination(match.getVersion());
+    			//dstAct.setNetworkAddress(getPhysicalIp(tenantId, match.getNetworkDestination()));
+    			dstAct.setNetworkAddress(getPhysicalIp(tenantId, match.get(MatchField.IPV4_DST).getInt()));    		
+    			actions.add(dstAct.getAction());
+    		}
+    	} else if (match.get(MatchField.ETH_TYPE) == EthType.ARP) {
+    		if (match.isExact(MatchField.ARP_SPA)) {
+    			final OVXActionNetworkLayerSource srcAct = new OVXActionNetworkLayerSource(match.getVersion());
+    			srcAct.setNetworkAddress(getPhysicalIp(tenantId, match.get(MatchField.ARP_SPA).getInt()));
+    			actions.add(srcAct.getAction());
+    		}
+    		
+    		if (match.isExact(MatchField.ARP_TPA)) {
+    			final OVXActionNetworkLayerDestination dstAct = new OVXActionNetworkLayerDestination(match.getVersion());
+    			dstAct.setNetworkAddress(getPhysicalIp(tenantId, match.get(MatchField.ARP_TPA).getInt()));    		
+    			actions.add(dstAct.getAction());
+    		}
     	}
     	return actions;
     }
     
-    public static List<OFAction> prependUnRewriteActions(final OFMatch match) {
+    public static List<OFAction> prependUnRewriteActions(final Match match) {
     	final List<OFAction> actions = new LinkedList<OFAction>();
-    	if (!match.getWildcardObj().isWildcarded(Flag.NW_SRC)) {
-    		final OVXActionNetworkLayerSource srcAct = new OVXActionNetworkLayerSource();
-    		srcAct.setNetworkAddress(match.getNetworkSource());
-    		actions.add(srcAct);
-    	}
-    	if (!match.getWildcardObj().isWildcarded(Flag.NW_DST)) {
-    		final OVXActionNetworkLayerDestination dstAct = new OVXActionNetworkLayerDestination();
-    		dstAct.setNetworkAddress(match.getNetworkDestination());
-    		actions.add(dstAct);
+    	
+    	if (match.get(MatchField.ETH_TYPE) == EthType.IPv4) {
+    		if (match.isExact(MatchField.IPV4_SRC)) {
+    			final OVXActionNetworkLayerSource srcAct = new OVXActionNetworkLayerSource(match.getVersion());
+    			srcAct.setNetworkAddress(match.get(MatchField.IPV4_SRC).getInt());
+    			actions.add(srcAct.getAction());
+    		}
+    		
+        	if (match.isExact(MatchField.IPV4_DST)) {
+        		final OVXActionNetworkLayerDestination dstAct = new OVXActionNetworkLayerDestination(match.getVersion());
+        		dstAct.setNetworkAddress(match.get(MatchField.IPV4_DST).getInt());
+        		actions.add(dstAct.getAction());
+        	}
+    	} else if (match.get(MatchField.ETH_TYPE) == EthType.ARP) {
+    		if (match.isExact(MatchField.ARP_SPA)) {
+    			final OVXActionNetworkLayerSource srcAct = new OVXActionNetworkLayerSource(match.getVersion());
+    			srcAct.setNetworkAddress(match.get(MatchField.ARP_SPA).getInt());
+    			actions.add(srcAct.getAction());
+    		}
+    		
+    		if (match.isExact(MatchField.ARP_TPA)) {
+    			final OVXActionNetworkLayerDestination dstAct = new OVXActionNetworkLayerDestination(match.getVersion());
+    			dstAct.setNetworkAddress(match.get(MatchField.ARP_TPA).getInt());
+    			actions.add(dstAct.getAction());
+    		}
     	}
     	return actions;
     }

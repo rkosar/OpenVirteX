@@ -10,7 +10,7 @@
 package net.onrc.openvirtex.core.io;
 
 import org.jboss.netty.channel.Channel;
-import org.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFMessage;
 
 public interface OVXEventHandler {
 

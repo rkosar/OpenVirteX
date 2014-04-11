@@ -40,7 +40,6 @@ import net.onrc.openvirtex.exceptions.IndexOutOfBoundException;
 import net.onrc.openvirtex.exceptions.PortMappingException;
 import net.onrc.openvirtex.exceptions.RoutingAlgorithmException;
 import net.onrc.openvirtex.messages.OVXPacketIn;
-import net.onrc.openvirtex.messages.OVXPacketOut;
 import net.onrc.openvirtex.routing.RoutingAlgorithms;
 import net.onrc.openvirtex.routing.SwitchRoute;
 import net.onrc.openvirtex.util.BitSetIndex;
@@ -50,11 +49,13 @@ import net.onrc.openvirtex.util.OVXFlowManager;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.OFMessage;
-import org.openflow.protocol.OFPacketIn;
-import org.openflow.protocol.OFPacketOut;
-import org.openflow.protocol.action.OFAction;
-import org.openflow.protocol.action.OFActionOutput;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFPacketInReason;
+import org.projectfloodlight.openflow.protocol.OFPacketOut;
+import org.projectfloodlight.openflow.protocol.OFVersion;
+import org.projectfloodlight.openflow.protocol.action.OFAction;
+import org.projectfloodlight.openflow.protocol.action.OFActionOutput;
+import org.projectfloodlight.openflow.types.OFBufferId;
 
 import com.google.common.collect.Lists;
 
@@ -73,7 +74,7 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 					.getName());
 
 	private final Integer                        tenantId;
-	private final HashSet<String>			 controllerUrls;
+	private final HashSet<String>			 	 controllerUrls;
 	private final IPAddress                      network;
 	private final short                          mask;
 	private HashMap<IPAddress, MACAddress>       gwsMap;
@@ -82,9 +83,9 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 	private final BitSetIndex                    linkCounter;
 	private final BitSetIndex                    ipCounter;
 	private final BitSetIndex                    hostCounter;
-	private final Map<OVXPort, Host>                    hostMap;
-	private final OVXFlowManager		 flowManager;
-
+	private final Map<OVXPort, Host>             hostMap;
+	private final OVXFlowManager				 flowManager;
+	private final OFVersion 					 ofversion;
 
 	/**
 	 * OVXNetwork constructor.
@@ -98,7 +99,7 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 	 * @throws IndexOutOfBoundException
 	 */
 	public OVXNetwork(final int tenantId, final ArrayList<String> controllerUrls, final IPAddress network,
-			final short mask) throws IndexOutOfBoundException {
+			final short mask, OFVersion ofversion) throws IndexOutOfBoundException {
 		super();
 		this.tenantId = tenantId;
 		this.controllerUrls = new HashSet<String>();
@@ -112,12 +113,13 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 		this.hostCounter = new BitSetIndex(IndexType.HOST_ID);
 		this.hostMap = new HashMap<OVXPort, Host>();
 		this.flowManager = new OVXFlowManager(this.tenantId, this.hostMap.values());
+		this.ofversion = ofversion;
 	}
 
 
 	public OVXNetwork(final ArrayList<String> controllerUrls, final IPAddress network,
-			final short mask) throws IndexOutOfBoundException {
-		this(OpenVirteXController.getTenantCounter().getNewIndex(), controllerUrls, network, mask);
+			final short mask, final OFVersion ofversion) throws IndexOutOfBoundException {
+		this(OpenVirteXController.getTenantCounter().getNewIndex(), controllerUrls, network, mask, ofversion);
 	}
 	
 	public Set<String> getControllerUrls() {
@@ -168,7 +170,6 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 	public Collection<Host> getHosts() {
 		return Collections.unmodifiableCollection(this.hostMap.values());
 	}
-
 
 
 	/*public Host getHost(final MACAddress mac) {
@@ -226,14 +227,14 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 		 * plus a unique number inside the virtual network
 		 */
 		final List<PhysicalSwitch> switches = new ArrayList<PhysicalSwitch>();
-		// TODO: check if dpids are present in physical network
+		// TODO: check if dpids are present in physical network	
 		for (final long dpid : dpids) {
 			switches.add(PhysicalNetwork.getInstance().getSwitch(dpid));
 		}
 		if (dpids.size() == 1) {
-			virtualSwitch = new OVXSingleSwitch(switchId, this.tenantId);
+			virtualSwitch = new OVXSingleSwitch(switchId, this.tenantId, this.ofversion);
 		} else {
-			virtualSwitch = new OVXBigSwitch(switchId, this.tenantId);
+			virtualSwitch = new OVXBigSwitch(switchId, this.tenantId, this.ofversion);
 		}
 		// Add switch to topology and register it in the map
 		this.addSwitch(virtualSwitch);
@@ -245,17 +246,15 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 		return virtualSwitch;
 	}
 
-
 	public OVXSwitch createSwitch(final List<Long> dpids) throws IndexOutOfBoundException {
 		final long switchId = (long) 0xa42305 << 32
 				| this.dpidCounter.getNewIndex();
 		return this.createSwitch(dpids, switchId);
 	}
 
-	public OVXPort createPort(final long physicalDpid, final short portNumber, final short... vportNumber) 
+	public OVXPort createPort(final long physicalDpid, final int portNumber, final int... vportNumber) 
 			throws IndexOutOfBoundException {
-		final PhysicalSwitch physicalSwitch = PhysicalNetwork.getInstance()
-				.getSwitch(physicalDpid);
+		final PhysicalSwitch physicalSwitch = PhysicalNetwork.getInstance().getSwitch(physicalDpid);
 		final PhysicalPort physicalPort = physicalSwitch.getPort(portNumber);
 
 		final OVXPort ovxPort;
@@ -274,7 +273,7 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 		return algorithm;
 	}
 
-	public Host connectHost(final long ovxDpid, final short ovxPort,
+	public Host connectHost(final long ovxDpid, final int ovxPort,
 			final MACAddress mac, final int hostId) throws IndexOutOfBoundException {
 		OVXPort port = this.getSwitch(ovxDpid).getPort(ovxPort);
 		port.boot();
@@ -285,7 +284,7 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 		return host;
 	}
 
-	public Host connectHost(final long ovxDpid, final short ovxPort,
+	public Host connectHost(final long ovxDpid, final int ovxPort,
 			final MACAddress mac) throws IndexOutOfBoundException {
 		return this.connectHost(ovxDpid, ovxPort, mac, this.hostCounter.getNewIndex());
 	}
@@ -300,8 +299,8 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 	 * @throws IndexOutOfBoundException
 	 * @throws PortMappingException 
 	 */
-	public synchronized OVXLink connectLink(final long ovxSrcDpid, final short ovxSrcPort,
-			final long ovxDstDpid, final short ovxDstPort, final String alg, final byte numBackups, final int linkId)
+	public synchronized OVXLink connectLink(final long ovxSrcDpid, final int ovxSrcPort,
+			final long ovxDstDpid, final int ovxDstPort, final String alg, final byte numBackups, final int linkId)
 					throws IndexOutOfBoundException, PortMappingException {
 		RoutingAlgorithms algorithm = null;
 		try {
@@ -336,8 +335,8 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 		return link;
 	}
 
-	public synchronized OVXLink connectLink(final long ovxSrcDpid, final short ovxSrcPort,
-			final long ovxDstDpid, final short ovxDstPort, final String alg, final byte numBackups ) 
+	public synchronized OVXLink connectLink(final long ovxSrcDpid, final int ovxSrcPort,
+			final long ovxDstDpid, final int ovxDstPort, final String alg, final byte numBackups ) 
 					throws IndexOutOfBoundException, PortMappingException {
 		final int linkId = this.linkCounter.getNewIndex();
 		return this.connectLink(ovxSrcDpid, ovxSrcPort, ovxDstDpid, ovxDstPort, alg, numBackups, linkId);
@@ -383,8 +382,8 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 		return link;
 	}
 
-	public synchronized SwitchRoute connectRoute(final long ovxDpid, final short ovxSrcPort,
-			final short ovxDstPort, final List<PhysicalLink> physicalLinks, 
+	public synchronized SwitchRoute connectRoute(final long ovxDpid, final int ovxSrcPort,
+			final int ovxDstPort, final List<PhysicalLink> physicalLinks, 
 			final byte priority, final int... routeId)
 					throws IndexOutOfBoundException {
 		OVXBigSwitch sw = (OVXBigSwitch) this.getSwitch(ovxDpid);
@@ -414,7 +413,7 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 		sw.unregister();
 	}
 
-	public synchronized void removePort(final long ovxDpid, final short ovxPort) {
+	public synchronized void removePort(final long ovxDpid, final int ovxPort) {
 		OVXPort port = this.getSwitch(ovxDpid).getPort(ovxPort);
 		port.unregister();
 	}
@@ -446,7 +445,7 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 	}
 
 
-	public synchronized void startPort(final long ovxDpid, final short ovxPort) {
+	public synchronized void startPort(final long ovxDpid, final int ovxPort) {
 		OVXPort port = this.getSwitch(ovxDpid).getPort(ovxPort);
 		port.boot();
 	}
@@ -456,7 +455,7 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 		sw.tearDown();
 	}
 
-	public synchronized void stopPort(final long ovxDpid, final short ovxPort) {
+	public synchronized void stopPort(final long ovxDpid, final int ovxPort) {
 		OVXPort port = this.getSwitch(ovxDpid).getPort(ovxPort);
 		port.tearDown();
 	}
@@ -497,31 +496,30 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 	@SuppressWarnings("rawtypes")
 	@Override
 	public void handleLLDP(final OFMessage msg, final Switch sw) {
-		final OVXPacketOut po = (OVXPacketOut) msg;
-		final byte[] pkt = po.getPacketData();
+		final OFPacketOut po = (OFPacketOut) msg;
+		final byte[] pkt = po.getData();
 
 		// Create LLDP response for each output action port
 		for (final OFAction action : po.getActions()) {
 			try {
-				final short portNumber = ((OFActionOutput) action)
-						.getPort();
+				final int portNumber = ((OFActionOutput) action).getPort().getPortNumber();
 				final OVXPort srcPort = (OVXPort) sw.getPort(portNumber);
 				final OVXPort dstPort = this.getNeighborPort(srcPort);
 				if (dstPort != null) {
-					final OVXPacketIn pi = new OVXPacketIn();
-					pi.setBufferId(OFPacketOut.BUFFER_ID_NONE);
+					
+					final OVXPacketIn pi = new OVXPacketIn(this.ofversion);
+					pi.setBufferId(OFBufferId.NO_BUFFER);
 					// Get input port from pkt_out
 					pi.setInPort(dstPort.getPortNumber());
-					pi.setReason(OFPacketIn.OFPacketInReason.NO_MATCH);
-					pi.setPacketData(pkt);
-					pi.setTotalLength((short) (OFPacketIn.MINIMUM_LENGTH + pkt.length));
-					dstPort.getParentSwitch().sendMsg(pi, this);
+					pi.setReason(OFPacketInReason.NO_MATCH);
+					pi.setData(pkt);
+					//pi.setTotalLength((short) (OFPacketIn.MINIMUM_LENGTH + pkt.length));
+					dstPort.getParentSwitch().sendMsg(pi.getPacket(), this);
 				}
 			} catch (final ClassCastException c) {
 				// ignore non-ActionOutput pkt_out's
 			}
 		}
-
 	}
 
 	@Override
@@ -540,10 +538,8 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 	}
 
 	public static void reset() {
-		OVXNetwork.log
-		.debug("Resetting tenantId counter to initial state. Don't do this at runtime!");
+		OVXNetwork.log.debug("Resetting tenantId counter to initial state. Don't do this at runtime!");
 		OpenVirteXController.getTenantCounter().reset();
-
 	}
 
 	public List<OVXLink> getLinksById(final Integer linkId) {
@@ -612,5 +608,9 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 	public void addControllers(ArrayList<String> ctrlUrls) {
 		this.controllerUrls.addAll(ctrlUrls);
 		
+	}
+	
+	public OFVersion getVersion() {
+		return ofversion;
 	}
 }

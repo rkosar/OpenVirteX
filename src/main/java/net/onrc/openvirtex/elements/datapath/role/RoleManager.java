@@ -15,8 +15,8 @@ import net.onrc.openvirtex.exceptions.UnknownRoleException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jboss.netty.channel.Channel;
-import org.openflow.protocol.OFMessage;
-import org.openflow.vendor.nicira.OFRoleVendorData;
+import org.projectfloodlight.openflow.protocol.OFNiciraControllerRole;
+import org.projectfloodlight.openflow.protocol.OFMessage;
 
 public class RoleManager {
 
@@ -32,11 +32,11 @@ public class RoleManager {
 	private Channel currentMaster;
 	
 	public static enum Role {
-        EQUAL(OFRoleVendorData.NX_ROLE_OTHER),
-        MASTER(OFRoleVendorData.NX_ROLE_MASTER),
-        SLAVE(OFRoleVendorData.NX_ROLE_SLAVE);
+        EQUAL(OFNiciraControllerRole.ROLE_OTHER.ordinal()),
+        MASTER(OFNiciraControllerRole.ROLE_MASTER.ordinal()),
+        SLAVE(OFNiciraControllerRole.ROLE_SLAVE.ordinal());
 
-        private final int nxRole;
+        private final int nxRole;  
 
         private Role(int nxRole) {
             this.nxRole = nxRole;
@@ -153,9 +153,7 @@ public class RoleManager {
     }
 
 	public Role getRole(Channel channel) {
-
-		return this.currentState.get().get(channel);		
-
+		return this.currentState.get().get(channel);
 	}
 	
 	private void checkAndSend(Channel c, OFMessage m) {
@@ -163,11 +161,9 @@ public class RoleManager {
 			if (c != null && c.isOpen())
 				c.write(Collections.singletonList(m));
 		}
-		
 	}
 
 	public void sendMsg(OFMessage msg, Channel c) {
-		
 		if (c != null) {
 			checkAndSend(c, msg);
 		} else {
@@ -178,8 +174,6 @@ public class RoleManager {
 				checkAndSend(chan, msg);
 			}
 		}
-		
-		
 	}
 
 	public synchronized void removeChannel(Channel channel) {

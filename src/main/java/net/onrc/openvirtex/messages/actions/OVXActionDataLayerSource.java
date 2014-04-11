@@ -17,29 +17,32 @@ import net.onrc.openvirtex.exceptions.AddressMappingException;
 import net.onrc.openvirtex.protocol.OVXMatch;
 import net.onrc.openvirtex.util.MACAddress;
 
-import org.openflow.protocol.OFError.OFBadActionCode;
-import org.openflow.protocol.action.OFAction;
-import org.openflow.protocol.action.OFActionDataLayerSource;
+import org.projectfloodlight.openflow.protocol.OFBadActionCode;
+import org.projectfloodlight.openflow.protocol.action.OFAction;
+import org.projectfloodlight.openflow.protocol.action.OFActionSetDlSrc;
 
-public class OVXActionDataLayerSource extends OFActionDataLayerSource implements
-		VirtualizableAction {
-
+public class OVXActionDataLayerSource implements VirtualizableAction {
+	private OFActionSetDlSrc asds;
+	
+	public OVXActionDataLayerSource(OFAction action) {
+		this.asds = (OFActionSetDlSrc) action;
+	}
+	
 	@Override
 	public void virtualize(final OVXSwitch sw,
 			final List<OFAction> approvedActions, final OVXMatch match)
 			throws ActionVirtualizationDenied {
-		final MACAddress mac = MACAddress.valueOf(this.dataLayerAddress);
+		
+		final MACAddress mac = MACAddress.valueOf(this.asds.getDlAddr().getBytes());
 		try {
 			final Integer tid = sw.getMap().getMAC(mac);
 			if (tid != sw.getTenantId()) {
 				throw new ActionVirtualizationDenied("Target mac " + mac
-						+ " is not in virtual network " + sw.getTenantId(),
-						OFBadActionCode.OFPBAC_EPERM);
+						+ " is not in virtual network " + sw.getTenantId(), OFBadActionCode.EPERM);
 			}
-			approvedActions.add(this);
+			approvedActions.add(this.asds);
 		} catch (AddressMappingException e) {
 		    
 		}
 	}
-
 }

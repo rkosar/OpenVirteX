@@ -9,9 +9,9 @@
 
 package net.onrc.openvirtex.linkdiscovery;
 
-import net.onrc.openvirtex.elements.datapath.Switch;
+import org.projectfloodlight.openflow.protocol.OFMessage;
 
-import org.openflow.protocol.OFMessage;
+import net.onrc.openvirtex.elements.datapath.Switch;
 
 @SuppressWarnings("rawtypes")
 public interface LLDPEventHandler {

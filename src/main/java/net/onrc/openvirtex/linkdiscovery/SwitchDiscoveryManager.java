@@ -25,22 +25,31 @@ import net.onrc.openvirtex.elements.datapath.Switch;
 import net.onrc.openvirtex.elements.network.PhysicalNetwork;
 import net.onrc.openvirtex.elements.port.PhysicalPort;
 import net.onrc.openvirtex.exceptions.PortMappingException;
-import net.onrc.openvirtex.messages.OVXMessageFactory;
-import net.onrc.openvirtex.messages.OVXPacketIn;
+import net.onrc.openvirtex.messages.OVXLLDP;
 import net.onrc.openvirtex.packet.Ethernet;
-import net.onrc.openvirtex.packet.OVXLLDP;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jboss.netty.util.Timeout;
 import org.jboss.netty.util.TimerTask;
-import org.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFFactory;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFPacketIn;
+import org.projectfloodlight.openflow.protocol.OFPacketOut;
+import org.projectfloodlight.openflow.protocol.action.OFAction;
+import org.projectfloodlight.openflow.protocol.action.OFActionOutput;
+import org.projectfloodlight.openflow.types.OFBufferId;
+import org.projectfloodlight.openflow.types.OFPort;
+
+
+/*import org.openflow.protocol.OFMessage;
 import org.openflow.protocol.OFPacketOut;
 import org.openflow.protocol.OFType;
 import org.openflow.protocol.action.OFAction;
 import org.openflow.protocol.action.OFActionOutput;
 import org.openflow.protocol.action.OFActionType;
-
+*/
 
 /**
  * Run discovery process from a physical switch. Ports are initially labeled as
@@ -58,15 +67,14 @@ TimerTask {
 	private final PhysicalSwitch sw;
 	// send 1 probe every probeRate milliseconds
 	private final long probeRate;
-	private final Set<Short> slowPorts;
-	private final Set<Short> fastPorts;
+	private final Set<Integer> slowPorts;
+	private final Set<Integer> fastPorts;
 	// number of unacknowledged probes per port
-	private final Map<Short, AtomicInteger> portProbeCount;
+	private final Map<Integer, AtomicInteger> portProbeCount;
 	// number of probes to send before link is removed
-	private final static short MAX_PROBE_COUNT = 3;
-	private Iterator<Short> slowIterator;
-	private final OVXMessageFactory ovxMessageFactory = OVXMessageFactory
-			.getInstance();
+	private final static int MAX_PROBE_COUNT = 3;
+	private Iterator<Integer> slowIterator;
+	//private final OVXMessageFactory ovxMessageFactory = OVXMessageFactory.getInstance();
 	Logger log = LogManager.getLogger(SwitchDiscoveryManager.class.getName());
 	OVXLLDP lldpPacket;
 	Ethernet ethPacket;
@@ -76,9 +84,9 @@ TimerTask {
 	public SwitchDiscoveryManager(final PhysicalSwitch sw, Boolean... useBDDP) {
 		this.sw = sw;
 		this.probeRate = 1000;
-		this.slowPorts = Collections.synchronizedSet(new HashSet<Short>());
-		this.fastPorts = Collections.synchronizedSet(new HashSet<Short>());
-		this.portProbeCount = new HashMap<Short, AtomicInteger>();
+		this.slowPorts = Collections.synchronizedSet(new HashSet<Integer>());
+		this.fastPorts = Collections.synchronizedSet(new HashSet<Integer>());
+		this.portProbeCount = new HashMap<Integer, AtomicInteger>();
 		this.lldpPacket = new OVXLLDP();
 		this.lldpPacket.setSwitch(this.sw);
 		this.ethPacket = new Ethernet();
@@ -140,7 +148,7 @@ TimerTask {
 	public void removePort(final PhysicalPort port) {
 		// Ignore ports that are not on this switch
 		if (port.getParentSwitch().equals(this.sw)) {
-			short portnum = port.getPortNumber();
+			int portnum = port.getPortNumber();
 			synchronized (this) {
 				if (this.slowPorts.contains(portnum)) {
 					this.slowPorts.remove(portnum);
@@ -168,7 +176,7 @@ TimerTask {
 	 */
 	public void ackProbe(final PhysicalPort port) {
 		if (port.getParentSwitch().equals(this.sw)) {
-			final short portNumber = port.getPortNumber();
+			final int portNumber = port.getPortNumber();
 			synchronized (this) {
 				if (this.slowPorts.contains(portNumber)) {
 					this.log.debug("Setting slow port to fast: {}:{}", port
@@ -202,24 +210,50 @@ TimerTask {
 		if (port == null) {
 			throw new PortMappingException("Cannot send LLDP associated with a nonexistent port");
 		}
+		
+		/*
 		final OFPacketOut packetOut = (OFPacketOut) this.ovxMessageFactory
 				.getMessage(OFType.PACKET_OUT);
-		packetOut.setBufferId(OFPacketOut.BUFFER_ID_NONE);
+		packetOut.setBufferId(OFBufferId.NO_BUFFER);
 		final List<OFAction> actionsList = new LinkedList<OFAction>();
 		final OFActionOutput out = (OFActionOutput) this.ovxMessageFactory
 				.getAction(OFActionType.OUTPUT);
 		out.setPort(port.getPortNumber());
 		actionsList.add(out);
 		packetOut.setActions(actionsList);
-		final short alen = SwitchDiscoveryManager.countActionsLen(actionsList);
+		final int alen = SwitchDiscoveryManager.countActionsLen(actionsList);
 		this.lldpPacket.setPort(port);
 		this.ethPacket.setSourceMACAddress(port.getHardwareAddress());
 		
 		final byte[] lldp = this.ethPacket.serialize();
 		packetOut.setActionsLength(alen);
 		packetOut.setPacketData(lldp);
-		packetOut.setLength((short) (OFPacketOut.MINIMUM_LENGTH + alen + lldp.length));
+		packetOut.setLength((int) (OFPacketOut.MINIMUM_LENGTH + alen + lldp.length));
 		return packetOut;
+		*/
+
+		OFFactory factory = OFFactories.getFactory(port.getPortDesc().getVersion());
+
+		final List<OFAction> actions = new LinkedList<OFAction>();
+
+		OFActionOutput oaction = factory.actions()
+										.buildOutput()
+										.setPort(OFPort.of(port.getPortNumber()))
+										.build();
+		actions.add(oaction);
+		
+		this.lldpPacket.setPort(port);
+		
+		this.ethPacket.setSourceMACAddress(port.getHardwareAddress());
+		
+		final byte[] lldp = this.ethPacket.serialize();
+		
+		OFPacketOut po = factory.buildPacketOut()
+								.setBufferId(OFBufferId.NO_BUFFER)
+								.setActions(actions)
+								.setData(lldp)
+								.build();
+		return po;
 	}
 	
 	/**
@@ -234,24 +268,48 @@ TimerTask {
 		if (port == null) {
 			throw new PortMappingException("Cannot send LLDP associated with a nonexistent port");
 		}
-		final OFPacketOut packetOut = (OFPacketOut) this.ovxMessageFactory
-				.getMessage(OFType.PACKET_OUT);
-		packetOut.setBufferId(OFPacketOut.BUFFER_ID_NONE);
+		
+		final OFFactory factory = OFFactories.getFactory(port.getPortDesc().getVersion());
+		
+		final List<OFAction> actions = new LinkedList<OFAction>();
+		final OFActionOutput out = factory.actions()
+										  .buildOutput()
+										  .setPort(OFPort.of(port.getPortNumber()))
+										  .build();
+		actions.add(out);
+		
+		this.lldpPacket.setPort(port);
+		this.bddpEth.setSourceMACAddress(port.getHardwareAddress());
+		final byte[] bddp = this.bddpEth.serialize();
+		
+		final OFPacketOut packetOut = factory.buildPacketOut()
+											 .setBufferId(OFBufferId.NO_BUFFER)
+											 .setActions(actions)
+											 .setData(bddp)
+											 .build();
+		return packetOut;
+		/*
+		final OFPacketOut packetOut = (OFPacketOut) this.ovxMessageFactory.getMessage(OFType.PACKET_OUT);
+
+		packetOut.setBufferId(OFBufferId.NO_BUFFER);
+		
 		final List<OFAction> actionsList = new LinkedList<OFAction>();
-		final OFActionOutput out = (OFActionOutput) this.ovxMessageFactory
-				.getAction(OFActionType.OUTPUT);
+		final OFActionOutput out = (OFActionOutput) this.ovxMessageFactory.getAction(OFActionType.OUTPUT);
 		out.setPort(port.getPortNumber());
 		actionsList.add(out);
 		packetOut.setActions(actionsList);
-		final short alen = SwitchDiscoveryManager.countActionsLen(actionsList);
+		
+		
+		final int alen = SwitchDiscoveryManager.countActionsLen(actionsList);
 		this.lldpPacket.setPort(port);
 		this.bddpEth.setSourceMACAddress(port.getHardwareAddress());
 		
 		final byte[] bddp = this.bddpEth.serialize();
 		packetOut.setActionsLength(alen);
 		packetOut.setPacketData(bddp);
-		packetOut.setLength((short) (OFPacketOut.MINIMUM_LENGTH + alen + bddp.length));
+		packetOut.setLength((int) (OFPacketOut.MINIMUM_LENGTH + alen + bddp.length));
 		return packetOut;
+		*/
 	}
 
 	@Override
@@ -266,13 +324,13 @@ TimerTask {
 	 * @param actionsList
 	 * @return The number of actions
 	 */
-	private static short countActionsLen(final List<OFAction> actionsList) {
-		short count = 0;
-		for (final OFAction act : actionsList) {
-			count += act.getLength();
-		}
-		return count;
-	}
+	//private static int countActionsLen(final List<OFAction> actionsList) {
+	//	int count = 0;
+	//	for (final OFAction act : actionsList) {
+	//		count += act.getLength();
+	//	}
+	//	return count;
+	//}
 
 	@Override
 	public String getName() {
@@ -285,15 +343,13 @@ TimerTask {
 	 */
 	@SuppressWarnings("rawtypes")
 	public void handleLLDP(final OFMessage msg, final Switch sw) {
-		final OVXPacketIn pi = (OVXPacketIn) msg;
-		final byte[] pkt = pi.getPacketData();
+		OFPacketIn pi = (OFPacketIn) msg;
+		final byte[] pkt = pi.getData();
 		
 		if (OVXLLDP.isOVXLLDP(pkt)) {
-			final PhysicalPort dstPort = (PhysicalPort) sw.getPort(pi
-					.getInPort());
+			final PhysicalPort dstPort = (PhysicalPort) sw.getPort(pi.getInPort().getPortNumber());
 			final DPIDandPort dp = OVXLLDP.parseLLDP(pkt);
-			final PhysicalSwitch srcSwitch = PhysicalNetwork.getInstance()
-					.getSwitch(dp.getDpid());
+			final PhysicalSwitch srcSwitch = PhysicalNetwork.getInstance().getSwitch(dp.getDpid());
 			final PhysicalPort srcPort = srcSwitch.getPort(dp.getPort());
 
 			PhysicalNetwork.getInstance().createLink(srcPort, dstPort);
@@ -315,9 +371,9 @@ TimerTask {
 	public void run(final Timeout t) {
 		this.log.debug("sending probes");
 		synchronized (this) {
-			final Iterator<Short> fastIterator = this.fastPorts.iterator();
+			final Iterator<Integer> fastIterator = this.fastPorts.iterator();
 			while (fastIterator.hasNext()) {
-				final Short portNumber = fastIterator.next();
+				final Integer portNumber = fastIterator.next();
 				final int probeCount = this.portProbeCount.get(portNumber)
 						.getAndIncrement();
 				if (probeCount < SwitchDiscoveryManager.MAX_PROBE_COUNT) {
@@ -353,7 +409,7 @@ TimerTask {
 					this.slowIterator = this.slowPorts.iterator();
 				}
 				if (this.slowIterator.hasNext()) {
-					final short portNumber = this.slowIterator.next();
+					final int portNumber = this.slowIterator.next();
 					this.log.debug("sending slow probe to port {}", portNumber);
 					try {
 						OFPacketOut pkt = this.createLLDPPacketOut(this.sw.getPort(portNumber));

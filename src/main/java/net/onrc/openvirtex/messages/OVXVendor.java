@@ -6,25 +6,34 @@
  * http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  ******************************************************************************/
 
-
 package net.onrc.openvirtex.messages;
+
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFNiciraControllerRoleReply;
+import org.projectfloodlight.openflow.protocol.OFNiciraControllerRoleRequest;
 
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 import net.onrc.openvirtex.elements.datapath.PhysicalSwitch;
 
-import org.openflow.protocol.OFVendor;
+public class OVXVendor implements Virtualizable, Devirtualizable {
+	private OFNiciraControllerRoleReply rrep;
+	private OFNiciraControllerRoleRequest rreq;
 
-public class OVXVendor extends OFVendor implements Virtualizable,
-		Devirtualizable {
-
+	
+	public OVXVendor(OFMessage m) {
+		if (m instanceof OFNiciraControllerRoleReply)
+			this.rrep = (OFNiciraControllerRoleReply) m;
+		else if (m instanceof OFNiciraControllerRoleRequest)
+			this.rreq = (OFNiciraControllerRoleRequest) m;
+	}
+	
 	@Override
 	public void devirtualize(final OVXSwitch sw) {
-		OVXMessageUtil.translateXidAndSend(this, sw);
+		OVXMessageUtil.translateXidAndSend(this.rreq, sw);
 	}
 
 	@Override
 	public void virtualize(final PhysicalSwitch sw) {
-		OVXMessageUtil.untranslateXidAndSend(this, sw);
+		OVXMessageUtil.untranslateXidAndSend(this.rrep, sw);
 	}
-
 }

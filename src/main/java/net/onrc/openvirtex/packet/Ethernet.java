@@ -29,9 +29,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import net.onrc.openvirtex.util.MACAddress;
+import org.projectfloodlight.openflow.util.HexString;
 
-import org.openflow.util.HexString;
+import net.onrc.openvirtex.util.MACAddress;
 
 /**
  * 

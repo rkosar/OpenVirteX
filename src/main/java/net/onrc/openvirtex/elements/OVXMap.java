@@ -68,12 +68,9 @@ public class OVXMap implements Mappable {
 		this.routetoPhyLinkMap = new ConcurrentHashMap<SwitchRoute, ArrayList<PhysicalLink>>();
 		this.phyLinktoRouteMap = new ConcurrentHashMap<PhysicalLink, ConcurrentHashMap<Integer, Set<SwitchRoute>>>();
 		this.networkMap = new ConcurrentHashMap<Integer, OVXNetwork>();
-		this.physicalIPMap = new ConcurrentRadixTree<OVXIPAddress>(
-				new DefaultCharArrayNodeFactory());
-		this.virtualIPMap = new ConcurrentRadixTree<ConcurrentHashMap<Integer, PhysicalIPAddress>>(
-				new DefaultCharArrayNodeFactory());
-		this.macMap = new ConcurrentRadixTree<Integer>(
-				new DefaultCharArrayNodeFactory());
+		this.physicalIPMap = new ConcurrentRadixTree<OVXIPAddress>(new DefaultCharArrayNodeFactory());
+		this.virtualIPMap = new ConcurrentRadixTree<ConcurrentHashMap<Integer, PhysicalIPAddress>>(new DefaultCharArrayNodeFactory());
+		this.macMap = new ConcurrentRadixTree<Integer>(new DefaultCharArrayNodeFactory());
 	}
 
 	/**
@@ -88,8 +85,7 @@ public class OVXMap implements Mappable {
 	}
 
 	public static void reset() {
-		OVXMap.log
-				.debug("OVXMap has been reset explicitly. Hope you know what you are doing!");
+		OVXMap.log.debug("OVXMap has been reset explicitly. Hope you know what you are doing!");
 		OVXMap.mapInstance.set(null);
 	}
 
@@ -164,7 +160,6 @@ public class OVXMap implements Mappable {
 		return this.virtualIPMap.getClosestKeys("");
 	}
 	
-
 	/**
 	 * This is the generic function which takes as arguments the
 	 * PhysicalIPAddress and the OVXIPAddress. This will add the value into both
@@ -385,7 +380,7 @@ public class OVXMap implements Mappable {
 			throws AddressMappingException{
 		OVXIPAddress vip = this.physicalIPMap.getValueForExactKey(ip.toString());
 		if (vip == null) {
-			throw new AddressMappingException(ip, OVXIPAddress.class);    
+			throw new AddressMappingException(ip, OVXIPAddress.class);
 		}
 		return vip;  
 	}
@@ -411,7 +406,7 @@ public class OVXMap implements Mappable {
 		}
 		OVXSwitch vsw = sws.get(tenantId);
 		if (vsw == null) {
-			throw new SwitchMappingException(tenantId, OVXSwitch.class);        
+			throw new SwitchMappingException(tenantId, OVXSwitch.class);
 		}
 		return vsw; 
 	}
@@ -499,7 +494,7 @@ public class OVXMap implements Mappable {
 			throws NetworkMappingException{
 		OVXNetwork vnet = this.networkMap.get(tenantId);
 		if (vnet == null) {
-			throw new NetworkMappingException(tenantId);    
+			throw new NetworkMappingException(tenantId);
 		}
 		return vnet; 
 	}
@@ -730,7 +725,4 @@ public class OVXMap implements Mappable {
 			}
 		}
 	}
-	
-	
-
 }

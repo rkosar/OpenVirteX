@@ -8,7 +8,12 @@
 
 package net.onrc.openvirtex.elements.datapath;
 
-import org.openflow.protocol.OFFeaturesReply.OFCapabilities;
+import java.util.HashSet;
+import java.util.Set;
+
+
+//import org.openflow.protocol.OFFeaturesReply.OFCapabilities;
+import org.projectfloodlight.openflow.protocol.OFCapabilities;
 
 /**
  * The Class OVXSwitchCapabilities.
@@ -67,28 +72,29 @@ public class OVXSwitchCapabilities {
 	 * 
 	 * @return the oVX switch capabilities
 	 */
-	public Integer getOVXSwitchCapabilities() {
-		Integer capabilities = 0;
+	public Set<OFCapabilities> getOVXSwitchCapabilities() {
+		Set<OFCapabilities> capabilities = new HashSet<OFCapabilities>();
+		//Integer capabilities = 0;
 		if (this.flowStatsCapability) {
-			capabilities += OFCapabilities.OFPC_FLOW_STATS.getValue();
+			capabilities.add(OFCapabilities.FLOW_STATS);
 		}
 		if (this.tableStatsCapability) {
-			capabilities += OFCapabilities.OFPC_TABLE_STATS.getValue();
+			capabilities.add(OFCapabilities.TABLE_STATS);
 		}
 		if (this.portStatsCapability) {
-			capabilities += OFCapabilities.OFPC_PORT_STATS.getValue();
+			capabilities.add(OFCapabilities.PORT_STATS);
 		}
 		if (this.stpCapability) {
-			capabilities += OFCapabilities.OFPC_STP.getValue();
+			capabilities.add(OFCapabilities.STP);
 		}
 		if (this.reassembleCapability) {
-			capabilities += OFCapabilities.OFPC_IP_REASM.getValue();
+			capabilities.add(OFCapabilities.IP_REASM);
 		}
 		if (this.queueStatsCapability) {
-			capabilities += OFCapabilities.OFPC_QUEUE_STATS.getValue();
+			capabilities.add(OFCapabilities.QUEUE_STATS);
 		}
 		if (this.matchIpCapability) {
-			capabilities += OFCapabilities.OFPC_ARP_MATCH_IP.getValue();
+			capabilities.add(OFCapabilities.ARP_MATCH_IP);
 		}
 		return capabilities;
 	}

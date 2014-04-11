@@ -61,7 +61,7 @@ public class AbstractAPICalls extends TestCase {
 	}
 
 	public JSONRPC2Response createPort(final Integer tenantId,
-			final Long dpid, final Short port) {
+			final Long dpid, final Integer port) {
 
 		final CreateOVXPort cp = new CreateOVXPort();
 

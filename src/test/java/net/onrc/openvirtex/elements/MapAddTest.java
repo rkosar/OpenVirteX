@@ -13,7 +13,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.openflow.protocol.OFPhysicalPort;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFPortDesc;
+import org.projectfloodlight.openflow.protocol.OFVersion;
+import org.projectfloodlight.openflow.types.OFPort;
 
 import junit.framework.Assert;
 import junit.framework.TestCase;
@@ -47,6 +50,8 @@ public class MapAddTest extends TestCase {
 
 	private final int MAXPSW = 1000;
 
+	private final OFVersion ofversion = OFVersion.OF_10;
+	
 	@SuppressWarnings("unused")
 	private OpenVirteXController ctl = null; 
 	private Mappable map = null;
@@ -92,7 +97,7 @@ public class MapAddTest extends TestCase {
 			sw = new PhysicalSwitch(i);
 			p_sw.add(sw);
 			for (int j = 0; j < this.MAXTIDS; j++) {
-				vsw = new OVXSingleSwitch(i, j);
+				vsw = new OVXSingleSwitch(i, j, this.ofversion);
 				v_sw.add(vsw);
 				this.map.addSwitches(Collections.singletonList(sw), vsw);
 			}
@@ -121,7 +126,6 @@ public class MapAddTest extends TestCase {
 		} catch (AddressMappingException e) {
 			e.printStackTrace();
 		}
-
 	}
 
 	public void testAddLinks() {
@@ -200,7 +204,7 @@ public class MapAddTest extends TestCase {
 		}
 		/* make 5 VSWs for a tenant */
 		for (long j = 0; j < this.MAXTIDS/2; j++) {
-			vsw = new OVXSingleSwitch(j, 1); /*DPID, TID*/
+			vsw = new OVXSingleSwitch(j, 1, this.ofversion); /*DPID, TID*/
 			vswmap.add(vsw);
 		}
 
@@ -220,10 +224,13 @@ public class MapAddTest extends TestCase {
 	}
 
 	protected PhysicalPort makePhyPort(short portnum, PhysicalSwitch psw) {
-		OFPhysicalPort ofpp = new OFPhysicalPort();
-		ofpp.setPortNumber(portnum);
+		OFPortDesc pd = OFFactories.getFactory(this.ofversion)
+								   .buildPortDesc()
+								   .setPortNo(OFPort.of(portnum))
+								   .build();
+		
 		/* whether edge or not doesn't matter for us */
-		return new PhysicalPort(ofpp, psw, false);
+		return new PhysicalPort(pd, psw, false);
 	}
 
 	protected OVXPort makeOVXPort(short portnum, final int tenant, final PhysicalPort port) {
@@ -247,5 +254,4 @@ public class MapAddTest extends TestCase {
 	protected void tearDown() throws Exception {
 		super.tearDown();
 	}
-
 }

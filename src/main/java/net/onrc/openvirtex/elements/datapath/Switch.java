@@ -21,10 +21,10 @@ import net.onrc.openvirtex.elements.port.Port;
 import net.onrc.openvirtex.messages.statistics.OVXDescriptionStatistics;
 
 import org.jboss.netty.channel.Channel;
-import org.openflow.protocol.OFFeaturesReply;
-import org.openflow.protocol.OFMessage;
-import org.openflow.protocol.OFVendor;
-import org.openflow.util.HexString;
+import org.projectfloodlight.openflow.protocol.OFExperimenter;
+import org.projectfloodlight.openflow.protocol.OFFeaturesReply;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.util.HexString;
 
 /**
  * The Class Switch.
@@ -34,8 +34,7 @@ import org.openflow.util.HexString;
  */
 
 @SuppressWarnings("rawtypes")
-public abstract class Switch<T extends Port> implements OVXEventHandler,
-OVXSendMsg {
+public abstract class Switch<T extends Port> implements OVXEventHandler, OVXSendMsg {
 
 	public static final String DB_KEY = "switches";
 
@@ -57,7 +56,7 @@ OVXSendMsg {
 	 * The port map. Associate all the port instances with the switch. The port
 	 * number is the key.
 	 */
-	protected HashMap<Short, T> portMap = null;
+	protected HashMap<Integer, T> portMap = null;
 
 	/** The features reply message. */
 	protected OFFeaturesReply featuresReply = null;
@@ -77,7 +76,7 @@ OVXSendMsg {
 	protected Switch(final Long switchId) {
 		this.switchId = switchId;
 		this.switchName = HexString.toHexString(this.switchId);
-		this.portMap = new HashMap<Short, T>();
+		this.portMap = new HashMap<Integer, T>();
 		this.featuresReply = null;
 		this.map = OVXMap.getInstance();
 	}
@@ -127,19 +126,19 @@ OVXSendMsg {
 	 * Returns an unmodifiable copy of the port map.
 	 */
 
-	public Map<Short, T> getPorts() {
+	public Map<Integer, T> getPorts() {
 		return Collections.unmodifiableMap(this.portMap);
 	}
 
 	/**
 	 * Gets the port.
 	 * 
-	 * @param portNumber
+	 * @param ofPort
 	 *            the port number
 	 * @return the port instance
 	 */
-	public T getPort(final Short portNumber) {
-		return this.portMap.get(portNumber);
+	public T getPort(final Integer ofPort) {
+		return this.portMap.get(ofPort);
 	};
 
 	/**
@@ -165,7 +164,7 @@ OVXSendMsg {
 	 *            the port number
 	 * @return true, if successful
 	 */
-	public boolean removePort(Short portNumber) {
+	public boolean removePort(Integer portNumber) {
 		if (this.portMap.containsKey(portNumber)) {
 			this.portMap.remove(portNumber);
 			return true;
@@ -184,7 +183,7 @@ OVXSendMsg {
 	public abstract void handleIO(OFMessage msg, Channel channel);
 	
 	
-	public abstract void handleRoleIO(OFVendor msg, Channel channel);
+	public abstract void handleRoleIO(OFExperimenter msg, Channel channel);
 
 	/**
 	 * Sets the connected.

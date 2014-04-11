@@ -9,8 +9,8 @@ package net.onrc.openvirtex.util;
 
 import java.util.BitSet;
 
-import org.openflow.protocol.OFPort;
-import org.openflow.util.U16;
+import org.projectfloodlight.openflow.types.OFPort;
+import org.projectfloodlight.openflow.types.U16;
 
 import net.onrc.openvirtex.core.OpenVirteXController;
 import net.onrc.openvirtex.elements.link.OVXLinkField;
@@ -31,7 +31,7 @@ public class BitSetIndex {
 		SWITCH_ID((int)Math.pow(2,32)),
 		LINK_ID(getLinkMaxValue()),
 		ROUTE_ID((int)Math.pow(2,24)),
-		PORT_ID(U16.f(OFPort.OFPP_MAX.getValue())),
+		PORT_ID(U16.f(OFPort.MAX.getShortPortNumber())),
 		FLOW_ID((int)Math.pow(2,24)),
 		HOST_ID((int)Math.pow(2,32)),
 		FLOW_COUNTER(getLinkMaxValue()),

@@ -9,25 +9,28 @@
 
 package net.onrc.openvirtex.messages;
 
+import org.projectfloodlight.openflow.protocol.OFBadRequestCode;
+import org.projectfloodlight.openflow.protocol.OFMessage;
+import org.projectfloodlight.openflow.protocol.OFQueueGetConfigRequest;
+
 import net.onrc.openvirtex.elements.datapath.OVXSwitch;
 import net.onrc.openvirtex.elements.port.OVXPort;
 
-import org.openflow.protocol.OFError.OFBadRequestCode;
-import org.openflow.protocol.OFQueueGetConfigRequest;
-
-public class OVXQueueGetConfigRequest extends OFQueueGetConfigRequest implements
-		Devirtualizable {
-
+public class OVXQueueGetConfigRequest implements Devirtualizable {
+	private OFQueueGetConfigRequest qgcr;
+	
+	public OVXQueueGetConfigRequest(OFMessage m) {
+		this.qgcr = (OFQueueGetConfigRequest) m;
+	}
+	
 	@Override
-	public void devirtualize(final OVXSwitch sw) {
-		final OVXPort p = sw.getPort(this.getPortNumber());
+	public void devirtualize(final OVXSwitch sw) {		
+		final OVXPort p = sw.getPort(this.qgcr.getPort().getPortNumber());
 		if (p == null) {
-			sw.sendMsg(OVXMessageUtil.makeErrorMsg(
-					OFBadRequestCode.OFPBRC_EPERM, this), sw);
+			sw.sendMsg(OVXMessageUtil.makeErrorMsg(OFBadRequestCode.EPERM, this.qgcr), sw);
 			return;
 		}
 
-		OVXMessageUtil.translateXid(this, p);
+		OVXMessageUtil.translateXid(this.qgcr, p);
 	}
-
 }

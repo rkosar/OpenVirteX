@@ -14,24 +14,25 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFPortDesc;
+import org.projectfloodlight.openflow.protocol.OFPortReason;
+import org.projectfloodlight.openflow.protocol.OFPortState;
+import org.projectfloodlight.openflow.types.MacAddress;
+import org.projectfloodlight.openflow.types.OFPort;
 
 import net.onrc.openvirtex.api.service.handlers.TenantHandler;
 import net.onrc.openvirtex.db.DBManager;
 import net.onrc.openvirtex.elements.datapath.PhysicalSwitch;
 import net.onrc.openvirtex.elements.link.PhysicalLink;
 import net.onrc.openvirtex.messages.OVXPortStatus;
-import org.openflow.protocol.OFPhysicalPort;
-import org.openflow.protocol.OFPortStatus.OFPortReason;
 
 
 public class PhysicalPort extends Port<PhysicalSwitch, PhysicalLink> {
 
 	private final Map<Integer, HashMap<Integer, OVXPort>> ovxPortMap;
-	
-	private PhysicalPort(final OFPhysicalPort port) {
-		super(port);
-		this.ovxPortMap = new HashMap<Integer, HashMap<Integer, OVXPort>>();
-	}
 
 	/**
 	 * Instantiate PhysicalPort based on an OpenFlow physical port
@@ -39,18 +40,34 @@ public class PhysicalPort extends Port<PhysicalSwitch, PhysicalLink> {
 	 * @param port
 	 * @param sw
 	 */
-	public PhysicalPort(final OFPhysicalPort port, final PhysicalSwitch sw,
+	public PhysicalPort(final OFPortDesc portdesc, final PhysicalSwitch sw,
 			final boolean isEdge) {
-		this(port);
+		this.pd = OFFactories.getFactory(portdesc.getVersion())
+				.buildPortDesc()
+				.setAdvertised(portdesc.getAdvertised())
+				.setConfig(portdesc.getConfig())
+				.setCurr(portdesc.getCurr())
+				.setHwAddr(portdesc.getHwAddr())
+				.setName(portdesc.getName())
+				.setPeer(portdesc.getPeer())
+				.setPortNo(portdesc.getPortNo())
+				.setState(portdesc.getState())
+				.setSupported(portdesc.getSupported())
+				.build();
+		this.mac = this.pd.getHwAddr();
+		
 		this.parentSwitch = sw;
 		this.isEdge = isEdge;
+		this.ovxPortMap = new HashMap<Integer, HashMap<Integer, OVXPort>>();
 	}
 
 	public OVXPort getOVXPort(final Integer tenantId, final Integer vLinkId) {
 		if (this.ovxPortMap.get(tenantId) == null) {
 			return null;
 		}
+		
 		OVXPort p = this.ovxPortMap.get(tenantId).get(vLinkId);
+		
 		if (p != null && !p.isActive())
 			return null;
 		return p;
@@ -59,10 +76,11 @@ public class PhysicalPort extends Port<PhysicalSwitch, PhysicalLink> {
 	public void setOVXPort(final OVXPort ovxPort) {
 		if (this.ovxPortMap.get(ovxPort.getTenantId()) != null) {
 		    if (ovxPort.getLink() != null)
-			this.ovxPortMap.get(ovxPort.getTenantId()).put(ovxPort.getLink().getInLink().getLinkId(),
-					ovxPort);
+		    	this.ovxPortMap.get(ovxPort.getTenantId())
+		    		.put(ovxPort.getLink().getInLink().getLinkId(), ovxPort);
 		    else 
-			this.ovxPortMap.get(ovxPort.getTenantId()).put(0,ovxPort);
+		    	this.ovxPortMap.get(ovxPort.getTenantId())
+		    		.put(0, ovxPort);
 		} else {
 			final HashMap<Integer, OVXPort> portMap = new HashMap<Integer, OVXPort>();
 			if (ovxPort.getLink() != null)
@@ -92,7 +110,7 @@ public class PhysicalPort extends Port<PhysicalSwitch, PhysicalLink> {
 	public Map<String, Object> getDBObject() {
 		Map<String, Object> dbObject = new HashMap<String, Object>();
 		dbObject.put(TenantHandler.DPID, this.getParentSwitch().getSwitchId());
-		dbObject.put(TenantHandler.PORT, this.portNumber);
+		dbObject.put(TenantHandler.PORT, this.pd.getPortNo());
 		return dbObject;
 	}
 	
@@ -100,6 +118,11 @@ public class PhysicalPort extends Port<PhysicalSwitch, PhysicalLink> {
 	    if (this.ovxPortMap.containsKey(ovxPort.getTenantId())) {
 		this.ovxPortMap.remove(ovxPort.getTenantId());
 	    }
+	}
+	
+	public OFPortDesc getPortDesc()
+	{
+		return pd;
 	}
 
 	@Override
@@ -112,7 +135,7 @@ public class PhysicalPort extends Port<PhysicalSwitch, PhysicalLink> {
 			return false;
 		
 		PhysicalPort port = (PhysicalPort) that;
-	    return this.portNumber==port.portNumber 
+	    return this.pd.getPortNo() == port.pd.getPortNo() 
 	    		&& this.parentSwitch.getSwitchId() == port.getParentSwitch().getSwitchId();
 	}
 	    
@@ -136,19 +159,24 @@ public class PhysicalPort extends Port<PhysicalSwitch, PhysicalLink> {
 	 * @param portstat
 	 */
 	public void applyPortStatus(OVXPortStatus portstat) {
-		if (!portstat.isReason(OFPortReason.OFPPR_MODIFY)) {    	
+		if (!portstat.isReason(OFPortReason.MODIFY)) {    	
 			return;    
 		}
-		OFPhysicalPort psport = portstat.getDesc();
-		this.portNumber = psport.getPortNumber();
-		this.hardwareAddress = psport.getHardwareAddress();
-		this.name = psport.getName();
-		this.config = psport.getConfig();    
-		this.state = psport.getState();    
-		this.currentFeatures = psport.getCurrentFeatures();
-		this.advertisedFeatures = psport.getAdvertisedFeatures();
-		this.supportedFeatures = psport.getSupportedFeatures();
-		this.peerFeatures = psport.getPeerFeatures();
+		OFPortDesc psport = portstat.getDesc();
+		
+		this.pd = this.pd.createBuilder()
+				.setPortNo(psport.getPortNo())
+				.setHwAddr(psport.getHwAddr())
+				.setName(psport.getName())
+				.setConfig(psport.getConfig())
+				.setState(psport.getState())
+				.setCurr(psport.getCurr())
+				.setAdvertised(psport.getAdvertised())
+				.setSupported(psport.getSupported())
+				.setPeer(psport.getPeer())
+				.build();
+		
+		this.mac = this.pd.getHwAddr();
 	}
 
 	/**
@@ -160,5 +188,24 @@ public class PhysicalPort extends Port<PhysicalSwitch, PhysicalLink> {
 			this.portLink.egressLink.unregister();
 			this.portLink.ingressLink.unregister();
 		}
+	}
+
+	public void setHardwareAddress(byte[] address) {
+		this.mac = MacAddress.of(address);
+	}
+
+	public void setPortNumber(int portNo) {
+		this.pd = this.pd
+				.createBuilder()
+				.setPortNo(OFPort.of(portNo))
+				.build();
+	}
+	
+	public byte [] getHardwareAddress() {
+		return this.mac.getBytes();
+	}
+
+	public Set<OFPortState> getState() {
+		return this.pd.getState();
 	}
 }

@@ -19,23 +19,45 @@ import net.onrc.openvirtex.protocol.OVXMatch;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.action.OFAction;
-import org.openflow.protocol.action.OFActionNetworkLayerDestination;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFVersion;
+import org.projectfloodlight.openflow.protocol.action.OFAction;
+import org.projectfloodlight.openflow.protocol.action.OFActionSetNwDst;
+import org.projectfloodlight.openflow.types.IPv4Address;
 
-public class OVXActionNetworkLayerDestination extends
-		OFActionNetworkLayerDestination implements VirtualizableAction {
 
-	private final Logger log = LogManager
-			.getLogger(OVXActionNetworkLayerDestination.class.getName());
+
+public class OVXActionNetworkLayerDestination  implements VirtualizableAction {
+	private OFActionSetNwDst asnd;
+	private final Logger log = LogManager.getLogger(OVXActionNetworkLayerDestination.class.getName());
+	
+	public OVXActionNetworkLayerDestination(OFAction action) {
+		this.asnd = (OFActionSetNwDst) action;
+	}
+	
+	public OVXActionNetworkLayerDestination(OFVersion ofversion) {
+		this.asnd = OFFactories.getFactory(ofversion).actions().buildSetNwDst().build();
+	}
 
 	@Override
 	public void virtualize(final OVXSwitch sw,
 			final List<OFAction> approvedActions, final OVXMatch match)
 			throws ActionVirtualizationDenied {
 		
-		this.networkAddress = IPMapper.getPhysicalIp(sw.getTenantId(), this.networkAddress);
-		log.debug("Allocating Physical IP {}", new PhysicalIPAddress(networkAddress));
-		approvedActions.add(this);
+		this.asnd = this.asnd.createBuilder()
+				.setNwAddr(IPv4Address.of(IPMapper.getPhysicalIp(sw.getTenantId(), this.asnd.getNwAddr().getInt())))
+				.build();
+		
+		//this.networkAddress = IPMapper.getPhysicalIp(sw.getTenantId(), this.networkAddress);
+		log.debug("Allocating Physical IP {}", new PhysicalIPAddress(this.asnd.getNwAddr().toString()));
+		approvedActions.add(this.asnd);
 	}
 
+	public void setNetworkAddress(Integer physicalIp) {
+		this.asnd = this.asnd.createBuilder().setNwAddr(IPv4Address.of(physicalIp)).build();
+	}
+	
+	public OFActionSetNwDst getAction() {
+		return this.asnd;
+	}
 }

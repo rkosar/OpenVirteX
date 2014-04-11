@@ -12,19 +12,19 @@ package net.onrc.openvirtex.elements.datapath;
  */
 public class XidPair<T> {
 
-	int xid;
+	long xid;
 	T sw;
 
-	public XidPair(final int x, final T sw) {
+	public XidPair(final long x, final T sw) {
 		this.xid = x;
 		this.sw = sw;
 	}
 
-	public void setXid(final int x) {
+	public void setXid(final long x) {
 		this.xid = x;
 	}
 
-	public int getXid() {
+	public long getXid() {
 		return this.xid;
 	}
 

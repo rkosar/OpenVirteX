@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-
 import net.onrc.openvirtex.elements.OVXMap;
 import net.onrc.openvirtex.elements.datapath.OVXBigSwitch;
 import net.onrc.openvirtex.elements.datapath.PhysicalSwitch;
@@ -32,7 +31,7 @@ import net.onrc.openvirtex.exceptions.SwitchMappingException;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.util.U8;
+import org.projectfloodlight.openflow.types.U8;
 
 /**
  * The Class ShortestPath. This class implements the Dijkstra Algorithm to compute the shortest path 

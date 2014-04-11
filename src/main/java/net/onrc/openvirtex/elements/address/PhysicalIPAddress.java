@@ -23,5 +23,4 @@ public class PhysicalIPAddress extends IPAddress {
 	public Integer getTenantId() {
 		return ip >> (32 - OpenVirteXController.getInstance().getNumberVirtualNets());
 	}
-
 }

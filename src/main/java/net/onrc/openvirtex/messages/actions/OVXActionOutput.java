@@ -34,27 +34,28 @@ import net.onrc.openvirtex.routing.SwitchRoute;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.OFPort;
-import org.openflow.protocol.Wildcards.Flag;
-import org.openflow.protocol.action.OFAction;
-import org.openflow.protocol.action.OFActionOutput;
-import org.openflow.util.U16;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.action.OFAction;
+import org.projectfloodlight.openflow.protocol.action.OFActionOutput;
+import org.projectfloodlight.openflow.protocol.match.MatchField;
+import org.projectfloodlight.openflow.types.OFPort;
+import org.projectfloodlight.openflow.types.U16;
 
-// TODO: handle case where input port is null: ODL does this
-public class OVXActionOutput extends OFActionOutput implements
-VirtualizableAction {
+public class OVXActionOutput implements VirtualizableAction {
+	private OFActionOutput ao;
 	Logger log = LogManager.getLogger(OVXActionOutput.class.getName());
 
+	public OVXActionOutput(OFAction action) {
+		this.ao = (OFActionOutput) action;
+	}
+	
 	@Override
 	public void virtualize(final OVXSwitch sw,
 			final List<OFAction> approvedActions, final OVXMatch match)
 					throws ActionVirtualizationDenied, DroppedMessageException {
 		final OVXPort inPort = sw.getPort(match.getInputPort());
-
-		// TODO: handle TABLE output port here
-		
 		final LinkedList<OVXPort> outPortList = this.fillPortList(
-				match.getInputPort(), this.getPort(), sw);
+				match.getInputPort(), this.ao.getPort().getPortNumber(), sw);
 		final OVXNetwork vnet;
 		try {
 			vnet = sw.getMap().getVirtualNetwork(sw.getTenantId());
@@ -74,7 +75,7 @@ VirtualizableAction {
 			// Retrieve the flowMod from the virtual flow map
 			final OVXFlowMod fm; 
 			try {
-				fm = sw.getFlowMod(match.getCookie());
+				fm = sw.getFlowMod(match.getCookie().getValue());
 			} catch (MappingException e) {
 				log.warn("FlowMod not found in our FlowTable");
 				return;
@@ -90,8 +91,7 @@ VirtualizableAction {
 				 * OVXSwitch is BigSwitch and inPort & outPort belongs to different physical switches
 				 */
 				if (sw instanceof OVXBigSwitch
-						&& inPort.getPhysicalPort().getParentSwitch() != outPort
-						.getPhysicalPort().getParentSwitch()) {
+						&& inPort.getPhysicalPort().getParentSwitch() != outPort.getPhysicalPort().getParentSwitch()) {
 					//Retrieve the route between the two OVXPorts
 					final OVXBigSwitch bigSwitch = (OVXBigSwitch) outPort
 							.getParentSwitch();
@@ -108,10 +108,10 @@ VirtualizableAction {
 					if (inPort.isLink()) {
 						final OVXPort dstPort = vnet.getNeighborPort(inPort);
 						final OVXLink link = inPort.getLink().getOutLink();
-						if (link != null && (!match.getWildcardObj().isWildcarded(Flag.DL_DST) ||
-								!match.getWildcardObj().isWildcarded(Flag.DL_SRC))) {
-							flowId = vnet.getFlowManager().
-									getFlowId(match.getDataLayerSource(), match.getDataLayerDestination());
+						if (link != null && (match.getMatch().isExact(MatchField.ETH_DST) || 
+											 match.getMatch().isExact(MatchField.ETH_SRC))) {
+							flowId = vnet.getFlowManager()
+										 .getFlowId(match.getDataLayerSource(), match.getDataLayerDestination());
 							OVXLinkUtils lUtils = new OVXLinkUtils(sw.getTenantId(), link.getLinkId(), flowId);
 							approvedActions.addAll(lUtils.unsetLinkFields());
 						} else {
@@ -121,14 +121,20 @@ VirtualizableAction {
 							return;
 						}
 					}
-
 					route.generateRouteFMs(fm.clone());
 
+					OFPort oPort = OFPort.IN_PORT;
 					//add the output action with the physical outPort (srcPort of the route)
 					if (inPort.getPhysicalPortNumber() != route.getPathSrcPort().getPortNumber())
-						approvedActions.add(new OFActionOutput(route.getPathSrcPort().getPortNumber()));
-					else 
-						approvedActions.add(new OFActionOutput(OFPort.OFPP_IN_PORT.getValue()));
+						oPort = OFPort.of(route.getPathSrcPort().getPortNumber());
+					
+					OFActionOutput nao = OFFactories.getFactory(sw.getVersion())
+							.actions()
+							.buildOutput()
+							.setPort(oPort)
+							.build();
+					
+					approvedActions.add(nao);
 				} 
 				/*
 				 * SingleSwitch and BigSwitch with inPort & outPort belonging 
@@ -138,7 +144,7 @@ VirtualizableAction {
 					if (inPort.isEdge()) {
 						if (outPort.isEdge()) {
 							//TODO: this is logically incorrect, i have to do this because we always add the rewriting actions in the flowMod. Change it.
-							approvedActions.addAll(IPMapper.prependUnRewriteActions(match));
+							approvedActions.addAll(IPMapper.prependUnRewriteActions(match.getMatch()));
 						} else {
 							/*
 							 * If inPort is edge and outPort is link:
@@ -149,8 +155,7 @@ VirtualizableAction {
 							final OVXLink link = outPort.getLink().getOutLink();
 							linkId = link.getLinkId();
 							try {
-								flowId = vnet.getFlowManager()
-										.storeFlowValues(
+								flowId = vnet.getFlowManager().storeFlowValues(
 												match.getDataLayerSource(),
 												match.getDataLayerDestination());
 								link.generateLinkFMs(fm.clone(), flowId);
@@ -170,7 +175,7 @@ VirtualizableAction {
 							 * 	- add actions to current FM to restore original IPs
 							 * 	- add actions to current FM to restore packet fields related to the link 
 							 */
-							approvedActions.addAll(IPMapper.prependUnRewriteActions(match));
+							approvedActions.addAll(IPMapper.prependUnRewriteActions(match.getMatch()));
 							// rewrite the OFMatch with the values of the link
 							final OVXPort dstPort = vnet.getNeighborPort(inPort);
 							final OVXLink link = dstPort.getLink().getOutLink();
@@ -204,15 +209,23 @@ VirtualizableAction {
 							}
 						}
 					}
+
+					OFPort oPort = OFPort.IN_PORT;
 					if (inPort.getPhysicalPortNumber() != outPort.getPhysicalPortNumber())
-						approvedActions.add(new OFActionOutput(outPort.getPhysicalPortNumber()));
-					else 
-						approvedActions.add(new OFActionOutput(OFPort.OFPP_IN_PORT.getValue()));
+						oPort = OFPort.of(outPort.getPhysicalPortNumber());
+					
+					OFActionOutput nao = OFFactories.getFactory(sw.getVersion())
+							.actions()
+							.buildOutput()
+							.setPort(oPort)
+							.build();
+					
+					approvedActions.add(nao);
 				}
 				// TODO: Check if I need to do the unrewrite here for the single
 				// switch
 			}
-		} else
+		} else {
 			if (match.isPacketOut()) {
 				/*
 				 * PacketOut management.
@@ -236,8 +249,10 @@ VirtualizableAction {
 					if (outPort.isLink()) {
 						final OVXPort dstPort = outPort.getLink().getOutLink().getDstPort();
 						dstPort.getParentSwitch().sendMsg(
-								new OVXPacketIn(match.getPktData(),
-										dstPort.getPortNumber()), sw);
+													new OVXPacketIn(match.getPktData(),
+																	dstPort.getPortNumber(), 
+																	dstPort.getParentSwitch().getVersion()).getPacket(),
+													sw);
 						this.log.debug(
 								"Generate a packetIn from OVX Port {}/{}, physicalPort {}/{}",
 								dstPort.getParentSwitch().getSwitchName(), dstPort.getPortNumber(), 
@@ -253,9 +268,11 @@ VirtualizableAction {
 						if ((inPort == null) || (((OVXBigSwitch) sw).getRoute(inPort, outPort) != null)) {
 							final PhysicalPort dstPort = outPort.getPhysicalPort();
 							dstPort.getParentSwitch().sendMsg(
-									new OVXPacketOut(match.getPktData(),
-											OFPort.OFPP_NONE.getValue(),
-											dstPort.getPortNumber()), sw);
+														new OVXPacketOut(match.getPktData(),
+																	  	 OFPort.ANY.getPortNumber(),
+																	  	 dstPort.getPortNumber(),
+																	  	 sw.getVersion()).getPacket(), 
+														sw);
 							this.log.debug(
 									"PacketOut for a bigSwitch port, "
 											+ "generate a packet from Physical Port {}/{}",
@@ -268,47 +285,50 @@ VirtualizableAction {
 						 * 
 						 */
 						throwException = false;
-						approvedActions.addAll(IPMapper.prependUnRewriteActions(match));
-						approvedActions.add(new OFActionOutput(outPort
-								.getPhysicalPortNumber()));
-						this.log.debug("Physical ports are on the same physical switch, rewrite only outPort to {}", outPort
-								.getPhysicalPortNumber());
+						approvedActions.addAll(IPMapper.prependUnRewriteActions(match.getMatch()));
+						
+						OFAction noa = OFFactories.getFactory(outPort.getParentSwitch().getVersion())
+								.actions()
+								.buildOutput()
+								.setPort(OFPort.of(outPort.getPhysicalPortNumber()))
+								.build();
+						
+						approvedActions.add(noa);
+						this.log.debug("Physical ports are on the same physical switch, rewrite only outPort to {}", 
+										outPort.getPhysicalPortNumber());
 					}
 				}
 				if (throwException == true)
 					throw new DroppedMessageException();
 			}
-
+		}
 	}
 
-	private LinkedList<OVXPort> fillPortList(final Short inPort,
-			final Short outPort, final OVXSwitch sw) throws DroppedMessageException {
+	private LinkedList<OVXPort> fillPortList(final Integer inPort,
+			final Integer outPort, final OVXSwitch sw) throws DroppedMessageException {
 		final LinkedList<OVXPort> outPortList = new LinkedList<OVXPort>();
-		if (U16.f(outPort) < U16.f(OFPort.OFPP_MAX.getValue())) {
+		
+		if (outPort < OFPort.MAX.getPortNumber() ) {
 			if (sw.getPort(outPort) != null && sw.getPort(outPort).isActive())
 				outPortList.add(sw.getPort(outPort));
-		} 
-		else if (U16.f(outPort) == U16.f(OFPort.OFPP_FLOOD.getValue())) {
-			final Map<Short, OVXPort> ports = sw.getPorts();
+		} else if (outPort == OFPort.FLOOD.getPortNumber() ) {
+			final Map<Integer, OVXPort> ports = sw.getPorts();
 			for (final OVXPort port : ports.values()) {
 				if (port.getPortNumber() != inPort && port.isActive())
 					outPortList.add(port);
 			}
-		} 
-		else if (U16.f(outPort) == U16.f(OFPort.OFPP_ALL.getValue())) {
-			final Map<Short, OVXPort> ports = sw.getPorts();
+		} else if (outPort == OFPort.ALL.getPortNumber()) {
+			final Map<Integer, OVXPort> ports = sw.getPorts();
 			for (final OVXPort port : ports.values()) {
 				if (port.isActive())
 					outPortList.add(port);
 			}
-		}
-		else
-			log.warn("Output port from controller currently not supported. Short = {}, Exadecimal = 0x{}" , 
-					U16.f(outPort), Integer.toHexString(U16.f(outPort) & 0xffff));
+		} else
+			log.warn("Output port from controller currently not supported. Short = {}, Hexadecimal = 0x{}" , 
+					U16.of(outPort), Integer.toHexString(U16.of(outPort).getValue() & 0xffff));
 
 		if (outPortList.size() < 1)
 			throw new DroppedMessageException("No output ports defined; dropping");
 		return outPortList;
 	}
-
 }

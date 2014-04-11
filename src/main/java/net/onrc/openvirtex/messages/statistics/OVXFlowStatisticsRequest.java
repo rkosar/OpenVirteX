@@ -20,71 +20,83 @@ import net.onrc.openvirtex.elements.port.OVXPort;
 import net.onrc.openvirtex.exceptions.MappingException;
 import net.onrc.openvirtex.exceptions.SwitchMappingException;
 import net.onrc.openvirtex.messages.OVXFlowMod;
-import net.onrc.openvirtex.messages.OVXStatisticsReply;
 import net.onrc.openvirtex.messages.OVXStatisticsRequest;
+import net.onrc.openvirtex.protocol.OVXMatch;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.openflow.protocol.OFPort;
-import org.openflow.protocol.action.OFAction;
-import org.openflow.protocol.statistics.OFFlowStatisticsRequest;
-import org.openflow.protocol.statistics.OFStatisticsType;
-import org.openflow.util.U16;
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFFlowStatsEntry;
+import org.projectfloodlight.openflow.protocol.OFFlowStatsReply;
+import org.projectfloodlight.openflow.protocol.OFFlowStatsRequest;
+import org.projectfloodlight.openflow.protocol.OFVersion;
+import org.projectfloodlight.openflow.types.OFPort;
+import org.projectfloodlight.openflow.types.TableId;
 
-public class OVXFlowStatisticsRequest extends OFFlowStatisticsRequest implements
-		DevirtualizableStatistic {
+public class OVXFlowStatisticsRequest  implements DevirtualizableStatistic {
+	private OFFlowStatsRequest fsr;
 
 	Logger log = LogManager.getLogger(OVXFlowStatisticsRequest.class.getName());
 	
+	public OVXFlowStatisticsRequest(OFVersion ofVersion) {
+		this.fsr = OFFactories.getFactory(ofVersion).buildFlowStatsRequest().build();
+	}
+	
 	@Override
 	public void devirtualizeStatistic(final OVXSwitch sw,
-			final OVXStatisticsRequest msg) {
-		List<OVXFlowStatisticsReply> replies = new LinkedList<OVXFlowStatisticsReply>();
+			final OVXStatisticsRequest msg) {		
+		//List<OVXFlowStatisticsReply> replies = new LinkedList<OVXFlowStatisticsReply>();
+
+		List<OFFlowStatsEntry> replies = new LinkedList<OFFlowStatsEntry>();		
 		HashSet<Long> uniqueCookies = new HashSet<Long>();
 		int tid = sw.getTenantId();
-		int length = 0;
-	
-		if ((this.match.getWildcardObj().isFull() || this.match.getWildcards() == -1) // the -1 is for beacon...
-				&& this.outPort == OFPort.OFPP_NONE.getValue()) {
+		//int length = 0;
+
+		//if ((this.match.getWildcardObj().isFull() || this.match.getWildcards() == -1) // the -1 is for beacon...
+		if (!this.fsr.getMatch().getMatchFields().iterator().hasNext()
+		  && this.fsr.getOutPort() == OFPort.ANY) {
 			for (PhysicalSwitch psw : getPhysicalSwitches(sw)) {
 				List<OVXFlowStatisticsReply> reps = psw.getFlowStats(tid);
 				if (reps != null) {
 					for (OVXFlowStatisticsReply stat : reps) {
-						
 						if (!uniqueCookies.contains(stat.getCookie())) {
 							OVXFlowMod origFM;
 							try {
-								origFM = sw.getFlowMod(stat.getCookie());
-								uniqueCookies.add(stat.getCookie());
+								origFM = sw.getFlowMod(stat.getCookie().getValue());
+								uniqueCookies.add(stat.getCookie().getValue());
 							} catch (MappingException e) {
 								log.warn("FlowMod not found in FlowTable for cookie={}", stat.getCookie());
 								continue;
 							}
-							stat.setCookie(origFM.getCookie());
-							stat.setMatch(origFM.getMatch());
-							stat.setActions(origFM.getActions());
-							replies.add(stat);
-							stat.setLength(U16.t(OVXFlowStatisticsReply.MINIMUM_LENGTH));
-							for (OFAction act : stat.getActions()) {
-								stat.setLength(U16.t(stat.getLength() + act.getLength()));
-							}
-							length += stat.getLength();
+							stat.setCookie(origFM.getCookie())
+							.setMatch(origFM.getMatch())
+							.setActions(origFM.getActions());
+							
+							replies.add(stat.getEntry());
+							//stat.setLength(U16.t(OVXFlowStatisticsReply.MINIMUM_LENGTH));
+							//for (OFAction act : stat.getActions()) {
+							//	stat.setLength(U16.t(stat.getLength() + act.getLength()));
+							//}
+							//length += stat.getLength();
 						}
 					}
-					
 				}
 			}
-			
-			
-			OVXStatisticsReply reply = new OVXStatisticsReply();
-			reply.setXid(msg.getXid());
-			reply.setStatisticType(OFStatisticsType.FLOW);
-			reply.setStatistics(replies);
-
-			reply.setLengthU(OVXStatisticsReply.MINIMUM_LENGTH + length);
+	
+			OFFlowStatsReply reply = OFFactories.getFactory(sw.getVersion())
+					.buildFlowStatsReply()
+					.setXid(msg.getXid())
+					.setEntries(replies)
+					.build();
 
 			sw.sendMsg(reply, sw);
+			//OVXStatisticsReply reply = new OVXStatisticsReply(OFStatsType.FLOW, sw.getVersion());
+			//reply.setXid(msg.getXid())
+			//	 .setStatistics(replies);
 
+			//reply.setLengthU(OVXStatisticsReply.MINIMUM_LENGTH + length);
+
+			//sw.sendMsg(reply.getStatsReply(), sw);
 		}
 	}
 
@@ -103,4 +115,18 @@ public class OVXFlowStatisticsRequest extends OFFlowStatisticsRequest implements
 		return sws;
 	}
 
+	public OVXFlowStatisticsRequest setOutPort(int outPort) {
+		this.fsr = this.fsr.createBuilder().setOutPort(OFPort.of(outPort)).build();
+		return this;
+	}
+
+	public OVXFlowStatisticsRequest setMatch(OVXMatch match) {
+		this.fsr = this.fsr.createBuilder().setMatch(match.getMatch()).build();
+		return this;
+	}
+
+	public OVXFlowStatisticsRequest setTableId(short tableId) {
+		this.fsr = this.fsr.createBuilder().setTableId(TableId.of(tableId)).build();
+		return this;
+	}
 }

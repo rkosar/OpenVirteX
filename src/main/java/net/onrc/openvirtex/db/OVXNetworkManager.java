@@ -30,13 +30,13 @@ import net.onrc.openvirtex.util.MACAddress;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.projectfloodlight.openflow.protocol.OFVersion;
 
 /**
  * Component that creates a previously stored virtual network when all required switches, links and ports are online.
  */
 
 public class OVXNetworkManager {
-
 	private Map<String, Object> vnet;
 	private Integer tenantId;
 	// Set of offline and online physical switches 
@@ -49,6 +49,7 @@ public class OVXNetworkManager {
 	private Set<DPIDandPort> offlinePorts;
 	private Set<DPIDandPort> onlinePorts;
 	private boolean bootState;
+	private OFVersion ofversion;
 
 	private static Logger log = LogManager.getLogger(OVXNetworkManager.class
 			.getName());
@@ -56,6 +57,7 @@ public class OVXNetworkManager {
 	public OVXNetworkManager(Map<String, Object> vnet) throws IndexOutOfBoundException, DuplicateIndexException {
 		this.vnet = vnet;
 		this.tenantId = (Integer) vnet.get(TenantHandler.TENANT);
+		this.ofversion = (OFVersion) vnet.get(TenantHandler.OF_VERSION);
 		this.offlineSwitches = new HashSet<Long>(); 
 		this.onlineSwitches = new HashSet<Long>();
 		this.offlineLinks = new HashSet<DPIDandPortPair>();
@@ -85,6 +87,9 @@ public class OVXNetworkManager {
 		return this.bootState;
 	}
 
+	public OFVersion getVersion() {
+		return this.ofversion;
+	}
 	/**
 	 * Register switch identified by dpid, ensuring the virtual network
 	 * is spawned only after the switch is online.
@@ -201,9 +206,9 @@ public class OVXNetworkManager {
 		for (Map<String, Object> hop: path) {
 			// Get src/dst dpid & port number from map
 			final Long sDpid = (Long) hop.get(TenantHandler.SRC_DPID);
-			final Short sPort = ((Integer) hop.get(TenantHandler.SRC_PORT)).shortValue();
+			final Integer sPort = ((Integer) hop.get(TenantHandler.SRC_PORT)).intValue();
 			final Long dDpid = (Long) hop.get(TenantHandler.DST_DPID);
-			final Short dPort = ((Integer) hop.get(TenantHandler.DST_PORT)).shortValue();
+			final Integer dPort = ((Integer) hop.get(TenantHandler.DST_PORT)).intValue();
 
 			// Get physical switch instances of end points
 			// TODO: what if any of the elements have gone down in the meantime? 
@@ -236,7 +241,7 @@ public class OVXNetworkManager {
 		final Short netMask = ((Integer) this.vnet.get(TenantHandler.NETMASK)).shortValue();
 		OVXNetwork virtualNetwork;
 		try {
-			virtualNetwork = new OVXNetwork(this.tenantId, ctrlUrls, addr, netMask);
+			virtualNetwork = new OVXNetwork(this.tenantId, ctrlUrls, addr, netMask, this.ofversion);
 		} catch (IndexOutOfBoundException e) {
 			OVXNetworkManager.log.error("Error recreating virtual network {} from database", this.tenantId);
 			return;

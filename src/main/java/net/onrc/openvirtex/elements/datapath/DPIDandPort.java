@@ -9,9 +9,9 @@ package net.onrc.openvirtex.elements.datapath;
 
 public class DPIDandPort {
 	long dpid;
-	short port;
+	int port;
 
-	public DPIDandPort(final long dpid, final short port) {
+	public DPIDandPort(final long dpid, final int port) {
 		super();
 		this.dpid = dpid;
 		this.port = port;
@@ -35,7 +35,7 @@ public class DPIDandPort {
 	/**
 	 * @return the port
 	 */
-	public short getPort() {
+	public int getPort() {
 		return this.port;
 	}
 
