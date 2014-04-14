@@ -642,7 +642,7 @@ public class SwitchChannelHandler extends OFChannelHandler {
 		if (type == OFType.HELLO)
 		{
 			// First meeting, sending the biggest version supported
-			this.ofversion = OFVersion.OF_13;
+			this.ofversion = this.maxVersion();
 			this.offactory = OFFactories.getFactory(this.ofversion);
 			m = this.offactory
 					.buildHello()
@@ -664,7 +664,12 @@ public class SwitchChannelHandler extends OFChannelHandler {
 		this.channel.write(Collections.singletonList(m));
 		*/
 	}
-
+	
+	private OFVersion maxVersion()
+	{
+		//Better code required.
+		return OFVersion.OF_13;
+	}
 	/**
 	 * Send the configuration requests to tell the switch we want full packets
 	 * 

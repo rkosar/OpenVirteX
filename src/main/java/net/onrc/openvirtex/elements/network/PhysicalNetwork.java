@@ -10,6 +10,7 @@ package net.onrc.openvirtex.elements.network;
 
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import net.onrc.openvirtex.core.OpenVirteXController;
 import net.onrc.openvirtex.core.io.OVXSendMsg;
@@ -41,7 +42,9 @@ import org.projectfloodlight.openflow.types.OFPort;
  */
 public class PhysicalNetwork extends Network<PhysicalSwitch, PhysicalPort, PhysicalLink> {
 
-	private static PhysicalNetwork instance;
+	private static AtomicReference<PhysicalNetwork> instance = new AtomicReference<>();
+
+	//private static PhysicalNetwork instance;
 	private ArrayList<Uplink> uplinkList;
 	private final ConcurrentHashMap<Long, SwitchDiscoveryManager> discoveryManager;
 	private static HashedWheelTimer timer;
@@ -54,10 +57,15 @@ public class PhysicalNetwork extends Network<PhysicalSwitch, PhysicalPort, Physi
 	}
 
 	public static PhysicalNetwork getInstance() {
+		PhysicalNetwork.instance.compareAndSet(null, new PhysicalNetwork());
+		return PhysicalNetwork.instance.get();
+		
+		/*
 		if (PhysicalNetwork.instance == null) {
 			PhysicalNetwork.instance = new PhysicalNetwork();
 		}
 		return PhysicalNetwork.instance;
+		*/
 	}
 
 	public static HashedWheelTimer getTimer() {
