@@ -505,14 +505,14 @@ public class OVXNetwork extends Network<OVXSwitch, OVXPort, OVXLink> implements 
 				final int portNumber = ((OFActionOutput) action).getPort().getPortNumber();
 				final OVXPort srcPort = (OVXPort) sw.getPort(portNumber);
 				final OVXPort dstPort = this.getNeighborPort(srcPort);
-				if (dstPort != null) {
-					
+				if (dstPort != null) { 
 					final OVXPacketIn pi = new OVXPacketIn(this.ofversion);
 					pi.setBufferId(OFBufferId.NO_BUFFER);
 					// Get input port from pkt_out
 					pi.setInPort(dstPort.getPortNumber());
 					pi.setReason(OFPacketInReason.NO_MATCH);
 					pi.setData(pkt);
+					pi.setTotalLength(pkt.length);
 					//pi.setTotalLength((short) (OFPacketIn.MINIMUM_LENGTH + pkt.length));
 					dstPort.getParentSwitch().sendMsg(pi.getPacket(), this);
 				}

@@ -434,4 +434,10 @@ public class OVXPacketIn implements Virtualizable {
 				.setData(data)
 				.build();
 	}
+
+	public void setTotalLength(int length) {
+		this.pi = this.pi.createBuilder()
+				.setTotalLen(length)
+				.build();
+	}
 }
