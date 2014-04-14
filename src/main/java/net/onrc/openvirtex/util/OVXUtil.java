@@ -123,7 +123,7 @@ public class OVXUtil {
 	
 	public static Match loadMatchFromEthPacket(final byte[] packetData, final int inputPort, final OFVersion ofversion) {
 		Match.Builder mb = OFFactories.getFactory(ofversion).buildMatch();
-		if (inputPort == OFPort.ANY.getPortNumber()) {
+		if (inputPort == OFPort.ZERO.getPortNumber()) {
 			log.warn("wildcarding port {}", inputPort);
 			mb.wildcard(MatchField.IN_PORT);
 		} else { 

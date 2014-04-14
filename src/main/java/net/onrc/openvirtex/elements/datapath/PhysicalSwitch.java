@@ -307,9 +307,9 @@ public class PhysicalSwitch extends Switch<PhysicalPort> {
 			if (port != 0) {
 				sendDeleteFlowMod(reply, port);
 				if (reply.getMatch().get(MatchField.IN_PORT).getPortNumber() == port) 
-					sendDeleteFlowMod(reply, OFPort.ANY.getPortNumber());
+					sendDeleteFlowMod(reply, OFPort.ZERO.getPortNumber());
 			} else
-				sendDeleteFlowMod(reply, OFPort.ANY.getPortNumber());
+				sendDeleteFlowMod(reply, OFPort.ZERO.getPortNumber());
 		}
 	}
 

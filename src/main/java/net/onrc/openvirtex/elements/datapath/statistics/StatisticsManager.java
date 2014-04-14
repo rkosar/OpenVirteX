@@ -66,8 +66,9 @@ public class StatisticsManager implements TimerTask, OVXSendMsg {
 		OVXMatch match = new OVXMatch();
 		//match.setWildcards(OFFlowWildcards.ALL);
 		
+		//OFPort.ANY ?
 		freq.setMatch(match)
-			.setOutPort(OFPort.ANY.getShortPortNumber())
+			.setOutPort(OFPort.ZERO.getShortPortNumber())
 			.setTableId((short)0x00FF);
 			//.setTableId((byte)0xFF);
 
@@ -81,7 +82,7 @@ public class StatisticsManager implements TimerTask, OVXSendMsg {
 		OVXStatisticsRequest req = new OVXStatisticsRequest(OFStatsType.PORT, ofversion); 
 		OVXPortStatisticsRequest preq = new OVXPortStatisticsRequest(ofversion);
 		
-		preq.setPortNumber(OFPort.ANY.getShortPortNumber());
+		preq.setPortNumber(OFPort.ZERO.getShortPortNumber());
 		req.setStatistics(Collections.singletonList(preq));
 		//req.setLengthU(req.getLengthU() + preq.getLength());
 		sendMsg(req.getStats(), this);

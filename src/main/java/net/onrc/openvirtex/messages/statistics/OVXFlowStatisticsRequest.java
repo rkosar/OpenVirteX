@@ -54,7 +54,7 @@ public class OVXFlowStatisticsRequest  implements DevirtualizableStatistic {
 
 		//if ((this.match.getWildcardObj().isFull() || this.match.getWildcards() == -1) // the -1 is for beacon...
 		if (!this.fsr.getMatch().getMatchFields().iterator().hasNext()
-		  && this.fsr.getOutPort() == OFPort.ANY) {
+		  && this.fsr.getOutPort() == OFPort.ZERO) {
 			for (PhysicalSwitch psw : getPhysicalSwitches(sw)) {
 				List<OVXFlowStatisticsReply> reps = psw.getFlowStats(tid);
 				if (reps != null) {

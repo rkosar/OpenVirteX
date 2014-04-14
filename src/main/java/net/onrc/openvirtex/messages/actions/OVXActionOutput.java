@@ -269,7 +269,7 @@ public class OVXActionOutput implements VirtualizableAction {
 							final PhysicalPort dstPort = outPort.getPhysicalPort();
 							dstPort.getParentSwitch().sendMsg(
 														new OVXPacketOut(match.getPktData(),
-																	  	 OFPort.ANY.getPortNumber(),
+																	  	 OFPort.ZERO.getPortNumber(),
 																	  	 dstPort.getPortNumber(),
 																	  	 sw.getVersion()).getPacket(), 
 														sw);

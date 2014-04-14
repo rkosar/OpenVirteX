@@ -120,7 +120,7 @@ public class OVXFlowTable implements FlowTable {
 						= this.vswitch.getMap().getPhysicalSwitches(this.vswitch);
 				for (PhysicalSwitch psw : p_list) {
 					/* do FlowMod cleanup like when port dies. */ 
-					psw.cleanUpTenant(this.vswitch.getTenantId(), OFPort.ANY.getPortNumber());
+					psw.cleanUpTenant(this.vswitch.getTenantId(), OFPort.ZERO.getPortNumber());
 		    	}
 				this.flowmodMap.clear();
 			    return false;

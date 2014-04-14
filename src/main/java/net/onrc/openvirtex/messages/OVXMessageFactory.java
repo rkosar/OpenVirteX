@@ -121,7 +121,7 @@ public class OVXMessageFactory  {
 			
 			//final OFMessage m = (OFMessage) c.getConstructor(new Class[] {}).newInstance();
 			
-			//if (m instanceof  OFMessageFactoryAware) {
+			//if (m instanceof OFMessageFactoryAware) {
 			//	((OFMessageFactoryAware) m).setMessageFactory(this);
 			//}
 			//if (m instanceof OFActionFactoryAware) {

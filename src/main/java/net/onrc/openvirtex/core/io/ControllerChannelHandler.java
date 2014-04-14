@@ -590,13 +590,13 @@ public class ControllerChannelHandler extends OFChannelHandler {
 		} else if (e.getMessage() instanceof OFMessage) {
 			final OFMessage ofm = (OFMessage) e.getMessage();
 			try {
-				switch (ofm.getType()) {
-				case PACKET_OUT:
-					/*
-					 * Is this packet a packet out? If yes is it an lldp?
-					 * then send it to the OVXNetwork.
-					 */
-					final byte[] data = ((OFPacketOut) ofm).getData(); //getPacketData();
+					switch (ofm.getType()) {
+					case PACKET_OUT:
+						/*
+						 * Is this packet a packet out? If yes is it an lldp?
+						 * then send it to the OVXNetwork.
+						 */
+						final byte[] data = ((OFPacketOut) ofm).getData(); //getPacketData();
 					if (data.length >= 14) {
 						final int tenantId = ((OVXSwitch) this.sw).getTenantId();
 						if (OVXLLDP.isLLDP(data)) {

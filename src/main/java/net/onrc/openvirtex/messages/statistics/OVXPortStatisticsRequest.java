@@ -37,7 +37,7 @@ public class OVXPortStatisticsRequest  implements DevirtualizableStatistic {
 		
 		List<OFPortStatsEntry> entries = new LinkedList<OFPortStatsEntry>();
 		
-		if (this.psr.getPortNo() == OFPort.ANY) {
+		if (this.psr.getPortNo() == OFPort.ZERO) {
 			for (OVXPort p : sw.getPorts().values()) {
 				OVXPortStatisticsReply reply =
 						p.getPhysicalPort().getParentSwitch().getPortStat(p.getPhysicalPort().getPortNumber());

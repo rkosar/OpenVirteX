@@ -47,7 +47,7 @@ public class OVXAggregateStatisticsRequest implements DevirtualizableStatistic {
 
 		//if ((this.match.getWildcardObj().isFull() || this.match.getWildcards() == -1) // the -1 is for beacon...
 		if (!this.asr.getMatch().getMatchFields().iterator().hasNext()
-				&& this.asr.getOutPort() == OFPort.ANY) {
+				&& this.asr.getOutPort() == OFPort.ZERO) {
 			FlowTable ft = sw.getFlowTable();
 			statb.setFlowCount(ft.getFlowTable().size())
 			.setByteCount(U64.ZERO)
