@@ -43,7 +43,7 @@ public class DPIDandPort {
 	 * @param port
 	 *            the port to set
 	 */
-	public void setPort(final short port) {
+	public void setPort(final int port) {
 		this.port = port;
 	}
 	
