@@ -74,7 +74,6 @@ public class OVXPacketIn implements Virtualizable {
 		 * send to.
 		 */
 		if (this.port.isEdge()) {
-			this.log.warn("packet is on edge");
 			this.tenantId = this.fetchTenantId(match, map, true);
 			if (this.tenantId == null) {
 				this.log.warn(

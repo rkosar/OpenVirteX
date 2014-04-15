@@ -10,6 +10,8 @@ package net.onrc.openvirtex.protocol;
 
 import java.util.HashMap;
 
+import org.projectfloodlight.openflow.protocol.OFFactories;
+import org.projectfloodlight.openflow.protocol.OFVersion;
 import org.projectfloodlight.openflow.protocol.match.*;
 import org.projectfloodlight.openflow.types.*;
 
@@ -34,8 +36,9 @@ public class OVXMatch {
     /**
      * Instantiates a new void OVXatch.
      */
-    public OVXMatch() {
-    	super();
+    public OVXMatch(OFVersion ofversion) {
+    	//super();
+    	this.match = OFFactories.getFactory(ofversion).buildMatch().build();
     	this.cookie = U64.of(0);
     	this.pktData = null;
     }

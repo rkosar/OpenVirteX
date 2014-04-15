@@ -102,7 +102,7 @@ public class OVXPacketOut implements Devirtualizable {
 			}
 		}
 		
-		if (this.getInPort().getShortPortNumber() < OFPort.MAX.getShortPortNumber())
+		if (this.getInPort().compareTo(OFPort.MAX) < 0)
 			this.po = this.po.createBuilder()
 			.setInPort(OFPort.of(inport.getPhysicalPortNumber()))
 			.build();
@@ -113,7 +113,7 @@ public class OVXPacketOut implements Devirtualizable {
 				.build();
 
 		//TODO: Beacon sometimes send msg with inPort == controller, check with Ayaka if it's ok
-		if (this.getInPort().getShortPortNumber() < OFPort.MAX.getShortPortNumber())
+		if (this.getInPort() .compareTo(OFPort.MAX) < 0)
 			OVXMessageUtil.translateXid(this.po, inport);
 		this.log.debug("Sending packet-out to sw {}: {}", sw.getName(), this.po);
 		sw.sendSouth(this.po, inport);

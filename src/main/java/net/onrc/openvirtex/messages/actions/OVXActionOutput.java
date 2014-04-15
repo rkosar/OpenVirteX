@@ -53,6 +53,7 @@ public class OVXActionOutput implements VirtualizableAction {
 	public void virtualize(final OVXSwitch sw,
 			final List<OFAction> approvedActions, final OVXMatch match)
 					throws ActionVirtualizationDenied, DroppedMessageException {
+		
 		final OVXPort inPort = sw.getPort(match.getInputPort());
 		final LinkedList<OVXPort> outPortList = this.fillPortList(
 				match.getInputPort(), this.ao.getPort().getPortNumber(), sw);
@@ -307,17 +308,16 @@ public class OVXActionOutput implements VirtualizableAction {
 	private LinkedList<OVXPort> fillPortList(final Integer inPort,
 			final Integer outPort, final OVXSwitch sw) throws DroppedMessageException {
 		final LinkedList<OVXPort> outPortList = new LinkedList<OVXPort>();
-		
-		if (outPort < OFPort.MAX.getPortNumber() ) {
+		if (OFPort.of(outPort).compareTo(OFPort.MAX) < 0 ) {
 			if (sw.getPort(outPort) != null && sw.getPort(outPort).isActive())
 				outPortList.add(sw.getPort(outPort));
-		} else if (outPort == OFPort.FLOOD.getPortNumber() ) {
+		} else if (OFPort.of(outPort).compareTo(OFPort.FLOOD) == 0) {
 			final Map<Integer, OVXPort> ports = sw.getPorts();
 			for (final OVXPort port : ports.values()) {
 				if (port.getPortNumber() != inPort && port.isActive())
 					outPortList.add(port);
 			}
-		} else if (outPort == OFPort.ALL.getPortNumber()) {
+		} else if (OFPort.of(outPort).compareTo(OFPort.ALL) == 0) {
 			final Map<Integer, OVXPort> ports = sw.getPorts();
 			for (final OVXPort port : ports.values()) {
 				if (port.isActive())

@@ -50,7 +50,7 @@ public class OVXStatisticsRequest  implements Devirtualizable {
 			this.sr = factory.buildDescStatsRequest().build();
 			break;
 		case EXPERIMENTER:
-			//this.srb =  null; // did on purpose, not sure what to map to 
+			//this.sr =  null; // did on purpose, not sure what to map to 
 			break;
 		case GROUP:
 			this.sr = factory.buildGroupStatsRequest().build();
