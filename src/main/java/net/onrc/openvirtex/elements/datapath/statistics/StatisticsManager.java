@@ -68,7 +68,7 @@ public class StatisticsManager implements TimerTask, OVXSendMsg {
 		
 		//OFPort.ANY ?
 		freq.setMatch(match)
-			.setOutPort(OFPort.ZERO.getPortNumber())
+			.setOutPort(OFPort.ZERO)
 			.setTableId((short)0x00FF);
 			//.setTableId((byte)0xFF);
 

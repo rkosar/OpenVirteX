@@ -115,8 +115,8 @@ public class OVXFlowStatisticsRequest  implements DevirtualizableStatistic {
 		return sws;
 	}
 
-	public OVXFlowStatisticsRequest setOutPort(int outPort) {
-		this.fsr = this.fsr.createBuilder().setOutPort(OFPort.of(outPort)).build();
+	public OVXFlowStatisticsRequest setOutPort(OFPort outPort) {
+		this.fsr = this.fsr.createBuilder().setOutPort(outPort).build();
 		return this;
 	}
 

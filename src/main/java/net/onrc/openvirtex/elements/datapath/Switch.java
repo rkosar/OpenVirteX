@@ -20,6 +20,8 @@ import net.onrc.openvirtex.elements.OVXMap;
 import net.onrc.openvirtex.elements.port.Port;
 import net.onrc.openvirtex.messages.statistics.OVXDescriptionStatistics;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jboss.netty.channel.Channel;
 import org.projectfloodlight.openflow.protocol.OFExperimenter;
 import org.projectfloodlight.openflow.protocol.OFFeaturesReply;
@@ -36,6 +38,8 @@ import org.projectfloodlight.openflow.util.HexString;
 @SuppressWarnings("rawtypes")
 public abstract class Switch<T extends Port> implements OVXEventHandler, OVXSendMsg {
 
+	private static Logger log = LogManager.getLogger(Switch.class
+			.getName());
 	public static final String DB_KEY = "switches";
 
 	/** Switch channel status. */
@@ -153,6 +157,7 @@ public abstract class Switch<T extends Port> implements OVXEventHandler, OVXSend
 		if (this.portMap.containsKey(port.getPortNumber())) {
 			return false;
 		}
+		log.warn("adding port {}", port);
 		this.portMap.put(port.getPortNumber(), port);
 		return true;
 	}

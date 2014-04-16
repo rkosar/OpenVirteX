@@ -60,7 +60,6 @@ public class PhysicalNetwork extends Network<PhysicalSwitch, PhysicalPort, Physi
 		//PhysicalNetwork.instance.compareAndSet(null, new PhysicalNetwork());
 		//return PhysicalNetwork.instance.get();
 		
-		
 		if (PhysicalNetwork.instance == null) {
 			PhysicalNetwork.instance = new PhysicalNetwork();
 		}
